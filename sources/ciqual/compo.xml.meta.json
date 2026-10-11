@@ -1,0 +1,11 @@
+{
+  "url": "https://entrepot.recherche.data.gouv.fr/api/access/datafile/:persistentId?persistentId=doi:10.57745/O73GDX",
+  "name": "compo.xml",
+  "size": 69243149,
+  "sha256": "8c46a9032ece4eab4ffccc9dfcb0c490ec2f416aa664cc1ee013b241c6bdd4af",
+  "md5": "2da725585946434df320d8041631998b",
+  "etag": "\"2da725585946434df320d8041631998b\"",
+  "last_modified": "Mon, 17 Nov 2025 09:49:09 GMT",
+  "revision": null,
+  "downloaded_at": "2026-10-11T10:47:54+00:00"
+}

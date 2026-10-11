@@ -1,0 +1,11 @@
+{
+  "url": "https://entrepot.recherche.data.gouv.fr/api/access/datafile/:persistentId?persistentId=doi:10.57745/FWSPCX",
+  "name": "const.xml",
+  "size": 17955,
+  "sha256": "3a231ea3e9836e4ac0b6ff94511e010210b2523d1b8b486c6b29e211066ba3f3",
+  "md5": "d8f2f25fdacb887bc993a6eeaf80f203",
+  "etag": "\"d8f2f25fdacb887bc993a6eeaf80f203\"",
+  "last_modified": "Mon, 17 Nov 2025 09:49:15 GMT",
+  "revision": null,
+  "downloaded_at": "2026-10-11T10:47:50+00:00"
+}

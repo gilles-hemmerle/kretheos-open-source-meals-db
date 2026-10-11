@@ -1,0 +1,11 @@
+{
+  "url": "https://entrepot.recherche.data.gouv.fr/api/access/datafile/:persistentId?persistentId=doi:10.57745/FMNIUZ",
+  "name": "alim_grp.xml",
+  "size": 80421,
+  "sha256": "e216928be1001aed15ba1b120405b70a98145da2a1a76026d6e33542bd5e39dc",
+  "md5": "c31aeea90349c3aab86f98ef5f4f10da",
+  "etag": "\"c31aeea90349c3aab86f98ef5f4f10da\"",
+  "last_modified": "Mon, 17 Nov 2025 09:48:44 GMT",
+  "revision": null,
+  "downloaded_at": "2026-10-11T10:47:49+00:00"
+}

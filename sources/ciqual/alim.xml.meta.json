@@ -1,0 +1,11 @@
+{
+  "url": "https://entrepot.recherche.data.gouv.fr/api/access/datafile/:persistentId?persistentId=doi:10.57745/OH8KXC",
+  "name": "alim.xml",
+  "size": 1581031,
+  "sha256": "e0b1de25b3039028205e9d54a96892e403e1b313c2efeb41180fabe132627478",
+  "md5": "8e1171d63cee4b6010cfce25dd29243d",
+  "etag": "\"8e1171d63cee4b6010cfce25dd29243d\"",
+  "last_modified": "Mon, 17 Nov 2025 09:48:40 GMT",
+  "revision": null,
+  "downloaded_at": "2026-10-11T10:47:48+00:00"
+}
