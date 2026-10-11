@@ -9,6 +9,8 @@ choosing the version served.
 from __future__ import annotations
 
 import copy
+import os
+import shutil
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -255,6 +257,150 @@ def test_search_ranks_the_country_first_and_filters(service: Running) -> None:
     assert service.get("/v1/foods/search?q=x&drink=yes")[1]["code"] == "invalid_request"
 
 
+def test_reference_foods_come_in_an_order_a_person_can_predict(service: Running) -> None:
+    """Language, a name that is or begins with the text, country, then the match."""
+    generic = "kind=generic"
+    # Both tables have the apple juice: the table of the country comes first...
+    assert service.found(f"q=apple+juice&{generic}&lang=en&country=FR") == [
+        "ciqual:2069",  # Apple juice, pure juice
+        "swiss:605",  # Apple juice
+    ]
+    assert service.found(f"q=apple+juice&{generic}&lang=en&country=CH") == [
+        "swiss:605",
+        "ciqual:2069",
+    ]
+    # ... and without one, the name that is the text beats the name whose first part is.
+    assert service.found(f"q=apple+juice&{generic}&lang=en") == ["swiss:605", "ciqual:2069"]
+    # A name in the language of the request beats the table of the country.
+    assert service.found(f"q=cola&{generic}&lang=fr&country=US") == [
+        "cnf:502",  # Boisson gazeuse, cola
+        "usda:sr_legacy:14400",  # no French name
+    ]
+    assert service.found(f"q=cola&{generic}&lang=en&country=US") == [
+        "usda:sr_legacy:14400",
+        "cnf:502",
+    ]
+    # A name beginning with the word typed beats a longer word beginning with it,
+    # whatever the country: "Cheese souffle" before "Cheeseburger".
+    assert service.found(f"q=cheese&{generic}&lang=en&country=US") == [
+        "cnf:2",
+        "usda:fndds:27510389",
+    ]
+    # No name in the language: another language answers, the country first again.
+    assert service.found(f"q=jus&{generic}&lang=de&country=FR") == ["ciqual:2069", "swiss:605"]
+    assert service.found(f"q=apfel&{generic}&lang=de") == ["swiss:605"]  # Apfelsaft
+    # Every reference food matching is read, two letters included.
+    assert service.found(f"q=br&{generic}") == ["cofid:11-001"]
+    assert service.found(f"q=mc&{generic}&lang=en") == [
+        "usda:sr_legacy:21237",  # McDONALD'S, BIG MAC: a whole word typed would be "mcdonald"
+        "usda:fndds:27510389",
+    ]
+
+
+def test_in_store_barcodes_are_flagged_and_come_after_every_other_product(
+    service: Running, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A number a shop gives to what it packs: last by name, unchanged by barcode."""
+    in_store = "gtin:20095314"  # Edel-Zartbitter-Schokolade
+    assert service.food(in_store)["flags"] == ["barcode_restricted", "in_store_barcode"]
+    assert "in_store_barcode" not in service.food(NUTELLA)["flags"]
+    # By barcode nothing changes.
+    status, by_barcode = service.get("/v1/barcodes/20095314")
+    assert status == 200 and by_barcode["id"] == in_store
+    assert service.found("q=20095314") == [in_store]
+    # By name it is still found when few other products match...
+    assert service.found("q=edel") == [in_store]
+    assert service.found("q=zartbitter&kind=product") == [in_store]
+    # ... after every other product, even one whose name matches less well.
+    other = dict(PRODUCT, names={"de": "Schokolade Edelbitter vom Test"})
+    weighed = dict(PRODUCT, barcode="2000000000039", names={"de": "Edel"})
+    other_id = service.post("/v1/products", other)[1]["id"]
+    assert service.post("/v1/products", weighed)[1]["id"] == "gtin:2000000000039"
+    assert service.found("q=edel") == [other_id, "gtin:2000000000039", in_store]
+    assert service.found("q=edel&country=CH") == [other_id, "gtin:2000000000039", in_store]
+    # When the other products fill their list, none of them is listed.
+    monkeypatch.setattr(search, "POOL_ALL", 0)
+    assert service.found("q=edel") == [other_id, "gtin:2000000000039"]
+
+
+def test_without_a_kind_the_reference_food_typed_comes_before_the_products(
+    service: Running,
+) -> None:
+    """The reference foods whose name, or first part, is the text; nothing else changes."""
+    juice = dict(PRODUCT, names={"en": "Apple juice"}, brand="Test Orchard", countries=["US"])
+    juice_id = service.post("/v1/products", juice)[1]["id"]
+    # A product of the country whose name is the text typed: it was first before.
+    assert service.found("q=apple+juice&lang=en&country=US") == [
+        "swiss:605",  # Apple juice
+        "ciqual:2069",  # Apple juice, pure juice
+        juice_id,
+    ]
+    assert service.found("q=apple+juice&lang=en&country=US&kind=product") == [juice_id]
+    # A reference food that merely holds the word keeps its place among the products:
+    # the country first, then generic foods before products.
+    assert service.found("q=juice&lang=en&country=US") == [
+        juice_id,
+        "swiss:605",
+        "ciqual:2069",
+        "gtin:9400547001910",
+    ]
+    assert service.found("q=cola&country=US")[:2] == ["gtin:0049000028911", "usda:sr_legacy:14400"]
+
+
+def test_what_was_read_of_the_reference_foods_is_not_asked_of_the_index_again(
+    service: Running, tmp_path: Path
+) -> None:
+    """Where only reference foods come before the barcoded products, as in the real build."""
+    with service.api._context() as context:
+        generation = context.generation
+        # The blocks never span the barcoded products, however few they are.
+        assert generation.reference_blocks == ((6, 13), (23, 31))
+        assert generation.in_store_blocks == ((15, 15),)
+        assert sorted(generation.reference_by_country) == ["CA", "CH", "FR", "GB", "US"]
+        # Here the dishes of the chains come first: the index is asked.
+        assert not generation.reference_only_below and not generation.reference_only_above
+        assert not generation.only_reference(6, 13)
+        # The best matches taken from the ranks are those the index gives itself.
+        match = ('"b"*',)
+        in_block = "FROM foods_fts WHERE foods_fts MATCH ? AND rowid BETWEEN 6 AND 13"
+        rows = [tuple(row) for row in context.base.execute(f"SELECT rowid, rank {in_block}", match)]
+        rank_of = dict(rows)
+        # Boisson gazeuse, Bread, Beer and bitter: three foods, three ranks.
+        assert len(rows) == 3 and len(set(rank_of.values())) == 3
+        for count in (1, 2, 3, 4):
+            asked = context.base.execute(
+                f"SELECT rank {in_block} ORDER BY rank LIMIT ?", (*match, count)
+            ).fetchall()
+            assert [rank_of[pk] for pk in search.best_of(rows, count)] == [row[0] for row in asked]
+    searches = (
+        "q=cola&country=US&lang=en",
+        "q=cola&country=CH",
+        "q=cola&kind=product&country=CH",
+        "q=apple+juice&lang=en&country=FR",
+        "q=jus&lang=fr&country=FR",
+        "q=bread",
+        "q=sugar+white&country=GB",
+        "q=br",
+        "q=hamburger&lang=fr&country=FR",
+    )
+    before = {query: service.found(query) for query in searches}
+    assert all(before.values())
+    # The same file without the dishes of the chains: nothing but reference foods is
+    # left before the barcoded products.
+    changed = tmp_path / "changed.sqlite"
+    shutil.copy(service.settings.database, changed)
+    connection = sqlite3.connect(changed)
+    connection.execute("DELETE FROM foods WHERE id LIKE 'chain:%'")
+    connection.commit()
+    connection.close()
+    os.replace(changed, service.settings.database)
+    with service.api._context() as context:
+        generation = context.generation
+        assert generation.reference_only_below and not generation.reference_only_above
+        assert generation.only_reference(6, 13) and not generation.only_reference(23, 31)
+    assert {query: service.found(query) for query in searches} == before
+
+
 def test_short_texts_only_search_generic_foods_and_dishes(service: Running) -> None:
     """One or two letters never rank the barcoded products."""
     # Two letters are the beginning of a word, among the foods without a barcode.
@@ -349,7 +495,12 @@ def test_product_is_created_and_visible_at_once(service: Running) -> None:
     known = dict(PRODUCT, barcode="049000028911")
     assert service.post("/v1/products", known)[1]["id"] == "gtin:0049000028911"
     in_store = dict(PRODUCT, barcode="2000000000039", names={"fr": "Fromage à la coupe"})
-    assert service.post("/v1/products", in_store)[1]["flags"] == ["barcode_restricted"]
+    # An in-store number: flagged on the record of its source by the build, and on the
+    # food by the service.
+    assert service.post("/v1/products", in_store)[1]["flags"] == [
+        "barcode_restricted",
+        "in_store_barcode",
+    ]
 
 
 def test_product_that_makes_no_sense_is_refused(service: Running) -> None:

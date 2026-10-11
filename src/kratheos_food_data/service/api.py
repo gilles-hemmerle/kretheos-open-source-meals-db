@@ -403,6 +403,7 @@ class Api:
             found = search.search(
                 context,
                 text,
+                language=language,
                 country=country,
                 kind=kind,
                 drink=drink,

@@ -16,8 +16,14 @@ system holds it in memory before the first searches need it.
 
 Each file being served is a `Generation`: a small pool of connections, what
 was read once from it (sources, licence, counts, the build date of the
-manifest next to it) and the range of internal numbers the barcoded products
-occupy, which lets a short search look only at generic foods and dishes.
+manifest next to it) and where things are in the full-text index, whose rows
+follow the identifiers: the range the barcoded products occupy, which lets a
+short search look only at generic foods and dishes; the few blocks where the
+generic foods are, which lets a search of reference foods read all those
+that match; whether the foods placed before, or after, the barcoded products
+are all generic foods, in which case what was read of them need not be asked
+of the index again; and the blocks of the in-store barcodes, which a search
+by name leaves for the end.
 """
 
 from __future__ import annotations
@@ -39,6 +45,14 @@ from .settings import MANIFEST_NAME
 SUPPORTED_LAYOUT = sqlite_export.LAYOUT_VERSION
 GTIN_FIRST = "gtin:"
 GTIN_AFTER = "gtin;"  # the first text sorting after every identifier starting with gtin:
+# Identifiers of the in-store barcodes, which shops give to what they weigh
+# and pack themselves: GTIN-13 beginning with 02, 04 and 2, and the 8 digit
+# numbers beginning the same way (`barcode.is_in_store`). Each pair is the
+# first identifier of a block and the first one after it.
+IN_STORE_PREFIXES = (("gtin:02", "gtin:03"), ("gtin:04", "gtin:05"), ("gtin:2", "gtin:3"))
+# Generic foods whose internal numbers are closer than this are one block:
+# asking the index once more costs more than reading past the foods between.
+REFERENCE_BLOCK_GAP = 16_384
 CHUNK = 500
 WARM_CHUNK_BYTES = 8 * 1024 * 1024
 Logger = Callable[[str], None]
@@ -108,6 +122,15 @@ class Generation:
         first_gtin: Lowest internal number of a barcoded product, or None
             when the products do not occupy one unbroken range.
         last_gtin: Highest internal number of a barcoded product.
+        reference_pks: Internal numbers of the generic foods.
+        reference_by_country: The same, for each country their values are of.
+        reference_blocks: The ranges of internal numbers they sit in, a few
+            other foods between them included.
+        reference_only_below: Whether the foods placed before the barcoded
+            products are all generic foods.
+        reference_only_above: The same for the foods placed after them.
+        in_store_blocks: The ranges of internal numbers of the products with
+            an in-store barcode, for those that sit in one unbroken range.
         loaded_at: When the service started serving it.
     """
 
@@ -121,6 +144,12 @@ class Generation:
     manifest: dict | None = None
     first_gtin: int | None = None
     last_gtin: int | None = None
+    reference_pks: frozenset[int] = frozenset()
+    reference_by_country: dict[str, frozenset[int]] = field(default_factory=dict)
+    reference_blocks: tuple[tuple[int, int], ...] = ()
+    reference_only_below: bool = False
+    reference_only_above: bool = False
+    in_store_blocks: tuple[tuple[int, int], ...] = ()
     loaded_at: str = ""
     _idle: queue.LifoQueue = field(default_factory=queue.LifoQueue, repr=False)
     _slots: threading.Semaphore | None = field(default=None, repr=False)
@@ -138,6 +167,23 @@ class Generation:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA query_only = 1")
         return connection
+
+    def only_reference(self, low: int, high: int) -> bool:
+        """Tell whether a block lies where every food is a generic food.
+
+        Args:
+            low: Lowest internal number of the block.
+            high: Highest internal number of the block.
+
+        Returns:
+            True when the block is before the barcoded products and nothing
+            but generic foods is there, or after them and the same holds.
+        """
+        if self.first_gtin is None or self.last_gtin is None:
+            return False
+        if high < self.first_gtin:
+            return self.reference_only_below
+        return low > self.last_gtin and self.reference_only_above
 
     def retire(self) -> None:
         """Close the idle connections; those in use close when given back."""
@@ -202,6 +248,8 @@ def read_generation(path: Path, signature: tuple) -> Generation:
         ).fetchone()
         if barcoded and highest - lowest + 1 == barcoded:
             generation.first_gtin, generation.last_gtin = lowest, highest
+        _locate_reference_foods(connection, generation)
+        _locate_in_store_barcodes(connection, generation)
         connection.execute("SELECT rowid FROM foods_fts WHERE foods_fts MATCH 'a' LIMIT 1")
         connection.execute("SELECT food_pk FROM versions LIMIT 1").fetchall()
     except sqlite3.Error as error:
@@ -223,6 +271,73 @@ def read_generation(path: Path, signature: tuple) -> Generation:
     generation.built_at = built_at
     generation.loaded_at = datetime.now(UTC).isoformat(timespec="seconds")
     return generation
+
+
+def _locate_reference_foods(connection: sqlite3.Connection, generation: Generation) -> None:
+    """Find where the generic foods are in the full-text index.
+
+    The rows of the index follow the identifiers, so the generic foods of a
+    table sit together. Outside the range of the barcoded products there are
+    160 000 foods to look at, not 3.5 million.
+
+    Args:
+        connection: A connection to the main database.
+        generation: The generation being read, completed in place.
+    """
+    first, last = generation.first_gtin, generation.last_gtin
+    select = "SELECT pk, countries FROM foods WHERE kind = 'generic'"
+    if first is not None:
+        rows = connection.execute(select + " AND (pk < ? OR pk > ?) ORDER BY pk", (first, last))
+    else:
+        rows = connection.execute(select + " ORDER BY pk")
+    pks: list[int] = []
+    by_country: dict[str, list[int]] = {}
+    countries_of: dict[str, list[str]] = {}
+    blocks: list[list[int]] = []
+    for pk, countries in rows:
+        pks.append(pk)
+        if countries:
+            if countries not in countries_of:
+                countries_of[countries] = json.loads(countries)
+            for country in countries_of[countries]:
+                by_country.setdefault(country, []).append(pk)
+        # A block never spans the barcoded products, however few they are.
+        same_side = first is None or not blocks or (blocks[-1][1] < first) == (pk < first)
+        if blocks and same_side and pk - blocks[-1][1] <= REFERENCE_BLOCK_GAP:
+            blocks[-1][1] = pk
+        else:
+            blocks.append([pk, pk])
+    generation.reference_pks = frozenset(pks)
+    generation.reference_by_country = {
+        country: frozenset(found) for country, found in by_country.items()
+    }
+    generation.reference_blocks = tuple((low, high) for low, high in blocks)
+    if first is not None:
+        below, above = connection.execute(
+            "SELECT count(*) FILTER (WHERE pk < ?), count(*) FILTER (WHERE pk > ?) FROM foods"
+            " WHERE pk < ? OR pk > ?",
+            (first, last, first, last),
+        ).fetchone()
+        generic_below = sum(1 for pk in pks if pk < first)
+        generation.reference_only_below = bool(below) and below == generic_below
+        generation.reference_only_above = bool(above) and above == len(pks) - generic_below
+
+
+def _locate_in_store_barcodes(connection: sqlite3.Connection, generation: Generation) -> None:
+    """Find where the products with an in-store barcode are in the index.
+
+    Args:
+        connection: A connection to the main database.
+        generation: The generation being read, completed in place.
+    """
+    blocks = []
+    for first, after in IN_STORE_PREFIXES:
+        lowest, highest, count = connection.execute(
+            "SELECT min(pk), max(pk), count(*) FROM foods WHERE id >= ? AND id < ?", (first, after)
+        ).fetchone()
+        if count and highest - lowest + 1 == count:
+            blocks.append((lowest, highest))
+    generation.in_store_blocks = tuple(blocks)
 
 
 def warm(generation: Generation) -> None:
@@ -422,6 +537,30 @@ def names_by_pk(connection: sqlite3.Connection, pks: Iterable[int]) -> dict[int,
     sql = "SELECT food_pk, lang, name, origin FROM names WHERE food_pk IN ({marks})"
     for row in _select_in(connection, sql, pks):
         found.setdefault(row["food_pk"], {})[row["lang"]] = (row["name"], row["origin"])
+    return found
+
+
+def reference_names(connection: sqlite3.Connection, pks: Iterable[int]) -> dict[int, tuple]:
+    """Read what orders reference foods: their identifier, countries and names.
+
+    Args:
+        connection: A connection to the main database.
+        pks: Internal numbers of foods.
+
+    Returns:
+        For each food, its identifier, the countries of the values in
+        `foods` and its names by language code.
+    """
+    found: dict[int, tuple[str, list[str], dict[str, str]]] = {}
+    sql = (
+        "SELECT f.pk, f.id, f.countries, n.lang, n.name FROM foods AS f"
+        " JOIN names AS n ON n.food_pk = f.pk WHERE f.pk IN ({marks})"
+    )
+    for row in _select_in(connection, sql, pks):
+        if row["pk"] not in found:
+            countries = json.loads(row["countries"]) if row["countries"] else []
+            found[row["pk"]] = (row["id"], countries, {})
+        found[row["pk"]][2][row["lang"]] = row["name"]
     return found
 
 

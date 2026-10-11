@@ -27,7 +27,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 from .. import kratheos, plausibility, schema, versions
-from ..barcode import is_restricted
+from ..barcode import is_in_store, is_restricted
 from ..names import FALLBACK_LANGUAGE
 from . import catalogue, live
 from .catalogue import Generation
@@ -44,6 +44,12 @@ NUTRIENT_FIELDS = (
     ("salt_g", "salt_g"),
     ("alcohol_g", "alcohol_g"),
 )
+# Flag of a food whose barcode is an in-store number (`barcode.is_in_store`):
+# one a shop gave to something it weighs or packs itself. Set by the service
+# on the food, whichever version is served (the build flags the record of
+# the source `barcode_restricted`, which also covers the own-brand numbers
+# of a few retailers).
+FLAG_IN_STORE_BARCODE = "in_store_barcode"
 NAME_ORIGIN_SOURCE = "source"
 NAME_ORIGIN_KRATHEOS = "kratheos"
 KRATHEOS_TITLE = kratheos.KRATHEOS_SOURCE.name
@@ -508,6 +514,8 @@ def render_food(context: Context, food: Food, language: str | None, country: str
     served = food.served(country, context.user_version_votes)
     name, name_language, name_origin = resolve_name(food, language)
     flags = list(served["flags"])
+    if is_in_store(food.barcode):
+        flags.append(FLAG_IN_STORE_BARCODE)
     if versions.disagree(food.versions):
         flags.append(versions.FLAG_VERSIONS_DISAGREE)
     return {

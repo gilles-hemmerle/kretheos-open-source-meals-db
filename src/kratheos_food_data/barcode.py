@@ -98,6 +98,30 @@ def is_restricted(barcode: str | None) -> bool:
     return False
 
 
+def is_in_store(barcode: str | None) -> bool:
+    """Tell whether a canonical barcode is a number a shop puts on what it packs itself.
+
+    These are the GTIN-13 beginning with 02, 04 and 20 to 29 (02 and 04 are
+    the 12-digit UPC-A numbers beginning with 2 and 4) and the 8-digit
+    numbers beginning the same way: the labels of the fresh counter, with a
+    weight or a price inside, and what a shop codes in house.
+
+    This is narrower than `is_restricted`, which also holds every 8-digit
+    number beginning with 0: those are the own-brand products of a few
+    retailers (Trader Joe's, Sainsbury's, Marks & Spencer, Tesco), packaged
+    products that people look for by name.
+
+    Args:
+        barcode: A canonical barcode, as returned by `normalize_gtin`.
+
+    Returns:
+        True for an in-store number.
+    """
+    if not barcode or len(barcode) not in (8, 13):
+        return False
+    return barcode[0] == "2" or barcode[:2] in ("02", "04")
+
+
 def _check_digit_sql(expression: str) -> str:
     """Build the SQL expression verifying the check digit of a digit string.
 

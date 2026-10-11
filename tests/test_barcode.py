@@ -7,7 +7,12 @@ import random
 import duckdb
 import pytest
 
-from kratheos_food_data.barcode import check_digit_ok, is_restricted, normalize_gtin
+from kratheos_food_data.barcode import (
+    check_digit_ok,
+    is_in_store,
+    is_restricted,
+    normalize_gtin,
+)
 
 CASES = [
     # (raw barcode, canonical form)
@@ -92,3 +97,30 @@ def test_check_digit_is_unchanged_by_zero_padding() -> None:
 def test_is_restricted(barcode: str | None, expected: bool) -> None:
     """Restricted-circulation prefixes are recognised."""
     assert is_restricted(barcode) is expected
+
+
+@pytest.mark.parametrize(
+    ("barcode", "expected"),
+    [
+        ("20095314", True),  # 8 digits starting with 2
+        ("02000008", True),  # 8 digits starting with 02
+        ("04000006", True),  # 8 digits starting with 04
+        ("2012345678903", True),  # 13 digits starting with 2: the label of the counter
+        ("0212345678908", True),  # UPC-A starting with 2: variable weight
+        ("0412345678906", True),  # UPC-A starting with 4
+        # The own-brand numbers of a few retailers are restricted, not in-store.
+        ("00123457", False),
+        ("01318180", False),
+        ("3017620422003", False),
+        ("0049000028911", False),
+        ("40123455", False),
+        ("20000000000004", False),  # 14 digits: a carton, not a label of the counter
+        ("", False),
+        (None, False),
+    ],
+)
+def test_is_in_store(barcode: str | None, expected: bool) -> None:
+    """The numbers a shop puts on what it packs itself: prefixes 02, 04 and 20 to 29."""
+    assert is_in_store(barcode) is expected
+    if expected:
+        assert is_restricted(barcode)  # every in-store number is a restricted one

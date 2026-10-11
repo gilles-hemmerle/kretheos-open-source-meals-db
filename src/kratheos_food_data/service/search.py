@@ -20,26 +20,57 @@ takes the time. So:
   because every word beginning with one letter cannot be listed quickly;
 * the whole search has a time budget (half a second by default). A text
   that still matches too much is cut off when the budget is spent, and the
-  answer holds what was found until then, the generic foods and dishes and
-  the foods of the country first: late results are dropped, never a late
-  answer.
+  answer holds what was found until then, the reference foods first: late
+  results are dropped, never a late answer.
 
-Where the results come from. The index ranks the matches of a text and gives
-its best ones; several such lists are put together: the best generic foods
-and dishes, the best of everything, and, when the request names a country,
-the best of each among the foods of that country, so that the foods of a
-small country are found even for a word that half the world uses. (When the
+Reference foods (`kind=generic`). The 27 000 generic foods of the
+food-composition tables sit in a few blocks of the index, so all those that
+match are read, not the best few of the index, whose own order prefers short
+names and knows nothing of foods. They are then put in the order of
+`ranking.py`: language of the request, a name that is or begins with the
+text, the table of the country, how the name matches, plain before
+processed, shortest name. A text matching more than 2 000 of them (two
+letters, "de", "with") falls back to the 300 the index ranks best in each
+block.
+
+Products (`kind=product`). The index ranks the matches and gives its best
+ones; several such lists are put together: the best foods without barcode,
+the best of everything, and, when the request names a country, the best of
+each among the foods of that country, so that the products of a small
+country are found even for a word that half the world uses. (When the
 country alone has 120 matches or more, the barcoded products of the rest of
 the world are not ranked as well: they would come after every page a person
-reads, and ranking them doubles the time.) That is 440 foods at most, which
-are then put in this order:
+reads, and ranking them doubles the time.) They are ordered by:
 
 1. the food carrying the barcode typed;
-2. the foods of the country of the request (the version served lists it);
-3. a name equal to the text, then a name beginning with it, then the rest;
-4. generic foods before products;
+2. a barcode that is not an in-store number before one that is;
+3. the foods of the country of the request (the version served lists it);
+4. a name equal to the text, then a name beginning with it, then the rest;
 5. the most scanned products first (the popularity of Open Food Facts);
 6. the shortest name, then the identifier, so that pages are stable.
+
+In-store barcodes. A shop numbers what it weighs and packs itself with
+numbers of its own (GTIN-13 beginning with 02, 04 or 20 to 29, and the 8
+digit numbers beginning the same way: `barcode.is_in_store`). One food in
+ten has such a number, and by their short names ("Poulet", "Pain complet")
+they were most of what the index ranked best. They occupy three blocks of
+the index, which are left out of the lists above. They come after every
+other product: when 120 other products match, those fill the answer and none
+of them is in it; when fewer do, the first 20 the index finds are added at
+the very end. A lookup by barcode is not concerned.
+
+Without `kind`, both are searched: the reference foods whose name, or first
+part, is the text typed come first, in their own order (40 at most);
+everything else follows in the order of the products, generic foods before
+products where that order does not tell them apart.
+
+What each question costs. Asking the index anything about a word costs the
+time of reading that word in it, however few rows are wanted, so the
+questions are counted: the reference foods are read once per block; where
+the foods placed before (or after) the barcoded products are all reference
+foods, their best matches are taken from what was just read, with the rank
+the index gave, instead of being asked again, and a search of products does
+not look there at all.
 
 What the live database holds (products added, names added) is searched in
 its own small index and merged in, so it is found at once.
@@ -47,30 +78,37 @@ its own small index and merged in, so it is found at once.
 
 from __future__ import annotations
 
-import functools
+import heapq
 import re
 import sqlite3
-import sys
 import time
-import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from ..barcode import normalize_gtin
-from ..schema import KIND_GENERIC
-from . import catalogue, foods, live
+from ..barcode import is_in_store, normalize_gtin
+from ..schema import KIND_GENERIC, KIND_PRODUCT
+from . import catalogue, foods, live, ranking
 from .foods import Context, Food
+from .ranking import fold
 
 MAX_QUERY_CHARS = 100
 MAX_WORDS = 8
 SHORT_QUERY_CHARS = 3
 POOL_GENERIC = 50
 POOL_ALL = 120
+POOL_IN_STORE = 20
 POOL_LIVE = 60
 POOL_BARCODES = 40
+# Reference foods: all those matching are ordered, up to this many, beyond
+# which the best of the index in each block are taken instead.
+REFERENCE_MATCHES = 2000
+REFERENCE_RANKED = 300
+# Reference foods kept for a search of reference foods, and, in a search of
+# everything, those whose name or first part is the text typed.
+REFERENCE_KEPT = 200
+REFERENCE_FIRST = 40
 MIN_BARCODE_PREFIX = 4
 PROGRESS_STEPS = 20_000
 _SEPARATORS = re.compile(r"[\s\-]")
-_NOT_A_WORD = re.compile(r"[\W_]+")
 
 
 @dataclass(frozen=True)
@@ -91,36 +129,6 @@ class Query:
     def short(self) -> bool:
         """Tell whether the text is too short to search every product."""
         return sum(len(word) for word in self.words) < SHORT_QUERY_CHARS
-
-
-@functools.lru_cache(maxsize=1)
-def _combining_marks() -> dict[int, None]:
-    """List the combining marks of Unicode, for `str.translate` to drop them.
-
-    Returns:
-        A translation table deleting every combining mark.
-    """
-    return dict.fromkeys(
-        code for code in range(sys.maxunicode + 1) if unicodedata.combining(chr(code))
-    )
-
-
-@functools.lru_cache(maxsize=65_536)
-def fold(text: str) -> str:
-    """Write a text the way the index compares it.
-
-    The names of the foods found are folded for every search and the same
-    ones come back often: the last ones are remembered.
-
-    Args:
-        text: Any text.
-
-    Returns:
-        The words of the text in lower case, without accents, separated by
-        single spaces; punctuation is dropped.
-    """
-    plain = unicodedata.normalize("NFKD", text.casefold()).translate(_combining_marks())
-    return _NOT_A_WORD.sub(" ", plain).strip()
 
 
 def parse(text: str) -> Query:
@@ -165,6 +173,8 @@ def _within(
     Returns:
         The rows, or None when the query was stopped or cannot be run.
     """
+    if time.monotonic() > deadline:
+        return None
     connection.set_progress_handler(lambda: time.monotonic() > deadline, PROGRESS_STEPS)
     try:
         return connection.execute(sql, parameters).fetchall()
@@ -174,8 +184,132 @@ def _within(
         connection.set_progress_handler(None, 0)
 
 
+@dataclass
+class Block:
+    """What a text matches in one block of reference foods.
+
+    Attributes:
+        low: Lowest internal number of the block.
+        high: Highest internal number of the block.
+        ranked: Whether the ranks of the index were asked for.
+        rows: Internal number and rank of each reference food matching; the
+            rank is 0 when it was not asked for.
+    """
+
+    low: int
+    high: int
+    ranked: bool
+    rows: list[tuple[int, float]] = field(default_factory=list)
+
+
+def best_of(rows: list[tuple[int, float]], count: int) -> list[int]:
+    """Pick the rows the index ranks best, as its own `ORDER BY rank LIMIT` does.
+
+    Args:
+        rows: Internal numbers with their rank; the lowest rank is the best.
+        count: How many to keep.
+
+    Returns:
+        The internal numbers kept, best first, equal ranks by number.
+    """
+    return [pk for pk, _ in heapq.nsmallest(count, rows, key=lambda row: (row[1], row[0]))]
+
+
+def _read_blocks(context: Context, query: Query, deadline: float, with_ranks: bool) -> list[Block]:
+    """Read every reference food matching a text, block by block.
+
+    Args:
+        context: Both databases.
+        query: The query.
+        deadline: Time after which the index is no longer asked.
+        with_ranks: Ask for the rank of the index where the block lies among
+            reference foods only: its best matches then need not be asked
+            again. A rank costs the reading of the whole word in the index,
+            so it is not asked where it would not be used.
+
+    Returns:
+        One entry per block of the generation, in their order.
+    """
+    generation = context.generation
+    match = match_expression(query)
+    blocks = []
+    for low, high in generation.reference_blocks:
+        block = Block(low, high, with_ranks and generation.only_reference(low, high))
+        rows = _within(
+            context.base,
+            f"SELECT rowid, {'rank' if block.ranked else '0'} FROM foods_fts"
+            " WHERE foods_fts MATCH ? AND rowid BETWEEN ? AND ?",
+            (match, low, high),
+            deadline,
+        )
+        block.rows = [(pk, rank) for pk, rank in rows or () if pk in generation.reference_pks]
+        blocks.append(block)
+    return blocks
+
+
+def _reference_order(
+    context: Context,
+    query: Query,
+    blocks: list[Block],
+    language: str | None,
+    country: str | None,
+    deadline: float,
+    only_the_food_typed: bool = False,
+) -> list[tuple[tuple, int]]:
+    """Put the reference foods matching a text in the order of `ranking.py`.
+
+    Args:
+        context: Both databases.
+        query: The query.
+        blocks: What the text matches in each block.
+        language: Language of the request, if any.
+        country: Country of the request, if any.
+        deadline: Time after which the index is no longer asked.
+        only_the_food_typed: Keep only the foods ranked by a name that is,
+            or whose first part is, the text typed.
+
+    Returns:
+        The sort key and the internal number of each reference food, best
+        first. The keys are computed on the names of the main database; what
+        the live database adds is counted when the foods are put together.
+    """
+    generation = context.generation
+    if sum(len(block.rows) for block in blocks) <= REFERENCE_MATCHES:
+        pks = [pk for block in blocks for pk, _ in block.rows]
+    else:
+        pks = []
+        for block in blocks:
+            if block.ranked:
+                pks += best_of(block.rows, REFERENCE_RANKED)
+                continue
+            rows = _within(
+                context.base,
+                "SELECT rowid FROM foods_fts WHERE foods_fts MATCH ? AND rowid BETWEEN ? AND ?"
+                " ORDER BY rank LIMIT ?",
+                (match_expression(query), block.low, block.high, REFERENCE_RANKED),
+                deadline,
+            )
+            pks += [row[0] for row in rows or () if row[0] in generation.reference_pks]
+    keyed = []
+    for pk, (food_id, countries, names) in catalogue.reference_names(context.base, pks).items():
+        if only_the_food_typed and not ranking.may_be_the_food_typed(names, query.words):
+            continue
+        key = ranking.reference_key(names, query.words, language, countries, country, food_id)
+        if not only_the_food_typed or ranking.is_the_food_typed(key[ranking.REFERENCE_KEY_MATCH]):
+            keyed.append((key, pk))
+    keyed.sort()
+    return keyed
+
+
 def _index_matches(
-    context: Context, query: Query, country: str | None, generic_only: bool, budget: float
+    context: Context,
+    query: Query,
+    country: str | None,
+    deadline: float,
+    *,
+    generic_only: bool = False,
+    products_only: bool = False,
+    blocks: list[Block] | None = None,
 ) -> list[int]:
     """Ask the full-text index of the main database for the best matches.
 
@@ -183,55 +317,102 @@ def _index_matches(
         context: Both databases.
         query: The query.
         country: Country of the request, if any.
+        deadline: Time after which the index is no longer asked.
         generic_only: Leave the barcoded products out, whatever the length.
-        budget: Seconds the whole search may take.
+        products_only: Only products are wanted: where nothing but reference
+            foods is, the index is not asked.
+        blocks: What was already read of the reference foods, if it was.
 
     Returns:
-        Internal numbers of foods: the best generic foods and dishes and,
-        when the text is long enough, the best of everything; each list
-        first among the foods of the country. What the budget did not leave
-        time for is missing.
+        Internal numbers of foods: the best foods without barcode and, when
+        the text is long enough, the best of everything that has no in-store
+        barcode; each list first among the foods of the country; then, when
+        those did not fill their list, a few of those that have one. What
+        the time did not allow is missing.
     """
     match = match_expression(query)
     if not match:
         return []
     generation = context.generation
-    deadline = time.monotonic() + budget
     everything = not query.short and not generic_only
+    in_store = generation.in_store_blocks
+    bounds = tuple(bound for block in in_store for bound in block)
     plain = "SELECT rowid FROM foods_fts WHERE foods_fts MATCH ? {where} ORDER BY rank LIMIT ?"
     local = (
         "SELECT m.rowid FROM foods_fts AS m"
         " JOIN food_countries AS c ON c.country = ? AND c.food_pk = m.rowid"
         " WHERE m.foods_fts MATCH ? {where} ORDER BY m.rank LIMIT ?"
     )
+    # The foods without a barcode: those placed before the barcoded products,
+    # those placed after. For each, the condition, its bound, whether nothing
+    # but reference foods is there, and the blocks lying there.
     ranges = []
     if generation.first_gtin is not None:
-        ranges = [("AND rowid < ?", generation.first_gtin), ("AND rowid > ?", generation.last_gtin)]
+        first, last = generation.first_gtin, generation.last_gtin
+        read = blocks or []
+        ranges = [
+            (
+                "AND rowid < ?",
+                first,
+                generation.reference_only_below,
+                [block for block in read if block.high < first],
+            ),
+            (
+                "AND rowid > ?",
+                last,
+                generation.reference_only_above,
+                [block for block in read if block.low > last],
+            ),
+        ]
 
     def run(sql: str, parameters: tuple) -> list[int]:
         """Run one search, unless the time is spent."""
-        if time.monotonic() > deadline:
-            return []
         return [row[0] for row in _within(context.base, sql, parameters, deadline) or ()]
 
+    def not_in_store(column: str) -> str:
+        """Write the condition leaving the blocks of in-store barcodes out."""
+        return " ".join(f"AND NOT ({column} BETWEEN ? AND ?)" for _ in in_store)
+
     found: list[int] = []
-    enough_of_the_country = False
-    if country:
-        for where, bound in ranges:
+    of_the_country = generation.reference_by_country.get(country or "", frozenset())
+    for where, bound, only_reference, inside in ranges:
+        if only_reference and products_only:
+            continue
+        if only_reference and blocks is not None and all(block.ranked for block in inside):
+            # Every match of this range was just read with its rank: its best
+            # ones are known without asking the index again.
+            rows = [row for block in inside for row in block.rows]
+            if country:
+                found += best_of([row for row in rows if row[0] in of_the_country], POOL_GENERIC)
+            found += best_of(rows, POOL_GENERIC)
+            continue
+        if country:
             sql = local.format(where=where.replace("rowid", "m.rowid"))
             found += run(sql, (country, match, bound, POOL_GENERIC))
-        if everything:
-            of_the_country = run(local.format(where=""), (country, match, POOL_ALL))
-            found += of_the_country
-            # A country with that many matches of its own fills every page a
-            # person will read: ranking the products of the rest of the world
-            # as well would double the time for results nobody reaches.
-            enough_of_the_country = len(of_the_country) >= POOL_ALL
-    for where, bound in ranges:
         found += run(plain.format(where=where), (match, bound, POOL_GENERIC))
-    if everything and not enough_of_the_country:
-        found += run(plain.format(where=""), (match, POOL_ALL))
-    elif not everything and not ranges:
+    if everything:
+        others: list[int] | None = None
+        if country:
+            sql = local.format(where=not_in_store("m.rowid"))
+            others = run(sql, (country, match, *bounds, POOL_ALL))
+            found += others
+        # A country with that many matches of its own fills every page a
+        # person will read: ranking the products of the rest of the world as
+        # well would double the time for results nobody reaches.
+        if others is None or len(others) < POOL_ALL:
+            others = run(plain.format(where=not_in_store("rowid")), (match, *bounds, POOL_ALL))
+            found += others
+        if in_store and len(others) < POOL_ALL:
+            # Fewer other products match than a list holds, so those with an
+            # in-store barcode have their place after them: the first ones
+            # the index finds will do, ranking them would cost for nothing.
+            rows = run(
+                "SELECT rowid FROM foods_fts WHERE foods_fts MATCH ? LIMIT ?",
+                (match, len(others) + POOL_IN_STORE),
+            )
+            kept = [pk for pk in rows if any(low <= pk <= high for low, high in in_store)]
+            found += kept[:POOL_IN_STORE]
+    elif not ranges:
         # The products do not occupy one range in this file: take the first
         # matches as they come, which costs nothing, rather than rank them all.
         found += run(
@@ -266,8 +447,14 @@ def _barcode_matches(context: Context, query: Query) -> tuple[str | None, list[i
     return exact, found
 
 
-def _rank(
-    food: Food, query: Query, barcode: str | None, country: str | None, served: dict
+def _order(
+    food: Food,
+    query: Query,
+    barcode: str | None,
+    language: str | None,
+    country: str | None,
+    served: dict,
+    kind: str | None,
 ) -> tuple:
     """Build the sort key of a food among the results.
 
@@ -275,12 +462,27 @@ def _rank(
         food: The food.
         query: The query.
         barcode: The barcode typed, when the text is one.
+        language: Language of the request, if any.
         country: Country of the request, if any.
         served: The version of the food this request gets.
+        kind: The kind asked for, if any.
 
     Returns:
-        A key sorting the results as the module describes.
+        A key sorting the results as the module describes: the barcode
+        typed; then the reference foods in the order of `ranking.py` (all of
+        them in a search of reference foods, those that are the food typed
+        otherwise); then the rest in the order of the products.
     """
+    typed_barcode = 0 if barcode and food.barcode == barcode else 1
+    if food.kind == KIND_GENERIC:
+        names = {lang: entry[0] for lang, entry in food.names.items()}
+        reference = ranking.reference_key(
+            names, query.words, language, served["countries"], country, food.id
+        )
+        if kind == KIND_GENERIC or ranking.is_the_food_typed(
+            reference[ranking.REFERENCE_KEY_MATCH]
+        ):
+            return (typed_barcode, 0, *reference)
     best = 2
     shortest = 99
     for name, _origin in food.names.values():
@@ -296,7 +498,9 @@ def _rank(
         elif closeness == best:
             shortest = min(shortest, len(folded.split()))
     return (
-        0 if barcode and food.barcode == barcode else 1,
+        typed_barcode,
+        1,
+        1 if is_in_store(food.barcode) else 0,
         0 if country and country in served["countries"] else 1,
         best,
         0 if food.kind == KIND_GENERIC else 1,
@@ -310,6 +514,7 @@ def search(
     context: Context,
     text: str,
     *,
+    language: str | None = None,
     country: str | None = None,
     kind: str | None = None,
     drink: bool | None = None,
@@ -320,10 +525,12 @@ def search(
     Args:
         context: Both databases.
         text: The text typed.
+        language: Language of the request: a reference food named in it
+            comes before one that only matches in another language.
         country: Country of the request: its foods come first.
         kind: Keep only `generic` foods or only `product`s.
         drink: Keep only the drinks, or only what is not a drink.
-        budget: Seconds the search of every food may take.
+        budget: Seconds the full-text index may take.
 
     Returns:
         The foods, in the order of the results; empty when the text holds no
@@ -332,6 +539,7 @@ def search(
     query = parse(text)
     if not query.words:
         return []
+    deadline = time.monotonic() + budget
     barcode, by_barcode = _barcode_matches(context, query)
     pks = list(by_barcode)
     live_ids = live.search(context.live, match_expression(query), POOL_LIVE)
@@ -344,7 +552,26 @@ def search(
             product = live.product_by_barcode(context.live, barcode)
             if product is not None:
                 live_ids.append(product["food_id"])
-    pks += _index_matches(context, query, country, kind == KIND_GENERIC, budget)
+    # Where the reference foods sit in blocks, all those matching are read
+    # first; the lists of the index are then only needed for the rest.
+    blocks = None
+    if kind != KIND_PRODUCT and context.generation.reference_blocks:
+        everything = kind != KIND_GENERIC
+        blocks = _read_blocks(context, query, deadline, with_ranks=everything)
+        references = _reference_order(
+            context, query, blocks, language, country, deadline, only_the_food_typed=everything
+        )
+        pks += [pk for _, pk in references[: REFERENCE_FIRST if everything else REFERENCE_KEPT]]
+    if kind != KIND_GENERIC or blocks is None:
+        pks += _index_matches(
+            context,
+            query,
+            country,
+            deadline,
+            generic_only=kind == KIND_GENERIC,
+            products_only=kind == KIND_PRODUCT,
+            blocks=blocks,
+        )
     seen = {row["pk"] for row in rows}
     rows += catalogue.foods_by_pk(context.base, [pk for pk in dict.fromkeys(pks) if pk not in seen])
     in_base = {row["id"] for row in rows}
@@ -360,6 +587,6 @@ def search(
         if drink is not None and food.is_drink != drink:
             continue
         served = food.served(country, context.user_version_votes)
-        ranked.append((_rank(food, query, barcode, country, served), food))
+        ranked.append((_order(food, query, barcode, language, country, served, kind), food))
     ranked.sort(key=lambda item: item[0])
     return [food for _, food in ranked]
