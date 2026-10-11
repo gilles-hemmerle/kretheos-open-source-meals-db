@@ -1,0 +1,109 @@
+chain,country,language,product_name,category,product_key,portion_size,portion_unit,is_drink,energy_kcal_per_portion,protein_g_per_portion,carbohydrate_g_per_portion,sugars_g_per_portion,fat_g_per_portion,saturated_fat_g_per_portion,fibre_g_per_portion,salt_g_per_portion,energy_kcal_per_100,protein_g_per_100,carbohydrate_g_per_100,sugars_g_per_100,fat_g_per_100,saturated_fat_g_per_100,fibre_g_per_100,salt_g_per_100,values_given,source_url,date_collected,sanity_flags
+Starbucks,ES,es,Pumpkin Spice Latte (Grande),Bebidas Espresso > Latte,128215,,,yes,99,2.7,11.4,11.2,4.4,3.4,1.3,0.12,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/128215,2026-10-11,no_portion
+Starbucks,ES,es,Iced Pumpkin Spice Latte (Grande),Bebidas Espresso > Latte,128689,,,yes,45,1.7,7.2,7.1,0.8,0.7,0.9,0.07,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/128689,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Frappuccino (Grande),Frappuccino ® > Coffee Frappuccino®,128055,,,yes,78,1,10.8,10.6,3.2,2.2,0.6,0.13,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/128055,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Creme Frappccino (Grande),Frappuccino ® > Cream Frappuccino®,129869,,,yes,74,1.1,9.6,9.5,3.3,2.3,0.6,0.13,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/129869,2026-10-11,no_portion
+Starbucks,ES,es,Agua Solan75 cl.,Ready To Drink > Waters,138753,,,yes,0,0,0,0,0,0,,0,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/138753,2026-10-11,no_portion
+Starbucks,ES,es,Kombucha Berry,Ready To Drink > Juices,139363,,,yes,19,0.3,3.7,2,1.5,0.1,,0.01,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/139363,2026-10-11,no_portion;energy_mismatch_portion(19/30)
+Starbucks,ES,es,Ginger Shot,Ready To Drink > Juices,136241,,,yes,29,0.5,7.3,7.1,0.5,0.1,,0,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/136241,2026-10-11,no_portion
+Starbucks,ES,es,Limonada,Ready To Drink > Juices,138849,,,yes,24,0.2,5.6,4,0.1,0,,0,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/138849,2026-10-11,no_portion
+Starbucks,ES,es,San Pellegrino Naranja,Ready To Drink > Juices,139329,,,yes,33,0.1,7.8,7.8,0,0,,0,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/139329,2026-10-11,no_portion
+Starbucks,ES,es,San Pelegrino 50cl,Ready To Drink > Juices,213324,,,yes,0,0,0,0,0,0,,0,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/213324,2026-10-11,no_portion
+Starbucks,ES,es,Smoothie frutas tropicales,Ready To Drink > Smoothies,214580,,,yes,53,0.8,12,12,0.5,0.1,,0.01,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214580,2026-10-11,no_portion
+Starbucks,ES,es,Smoothie Apple raspberry,Ready To Drink > Smoothies,214584,,,yes,41,0.5,9.9,9.8,0.5,0,,0,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214584,2026-10-11,no_portion
+Starbucks,ES,es,Maple Bun,Bakery,416297,,,no,323,6.4,49,21,11,3.9,,0.34,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/416297,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Bun,Bakery,416235,,,no,276,5.8,44,22,8.4,3.9,,0.35,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/416235,2026-10-11,no_portion
+Starbucks,ES,es,Salted Caramel Muffin,Bakery,347978,,,no,482,5.5,62.4,35.1,24.7,5.3,,0.7,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/347978,2026-10-11,no_portion
+Starbucks,ES,es,Hojaldre de manzana,Bakery,355416,,,no,360,6.9,46,21,16,11,,0.54,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/355416,2026-10-11,no_portion
+Starbucks,ES,es,Cruffin Pistacho,Bakery,355446,,,no,354,8.1,35.7,11.7,19.3,11.9,,0.8,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/355446,2026-10-11,no_portion
+Starbucks,ES,es,Rasberry Cake,Bakery,347960,,,no,293,2.9,54,33,7.4,3.2,,0.38,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/347960,2026-10-11,no_portion
+Starbucks,ES,es,Croissant,Bakery,131363,,,no,338,6.9,38.3,14.1,17.2,11.5,,0.99,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/131363,2026-10-11,no_portion
+Starbucks,ES,es,Croissant Jamón y Queso,Bakery,131459,,,no,255,13,20.6,7.7,13.1,8.7,,1.4,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/131459,2026-10-11,no_portion
+Starbucks,ES,es,Cinnamon Roll,Bakery,131205,,,no,312,5.4,43,18,13,5.9,,0.8,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/131205,2026-10-11,no_portion
+Starbucks,ES,es,Napolitana,Bakery,139271,,,no,414,7,46.2,18.8,22.2,14.5,,0.8,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/139271,2026-10-11,no_portion
+Starbucks,ES,es,Brownie doble chocolate,Bakery,214795,,,no,482,7.4,46,33,29,17,,0.63,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214795,2026-10-11,no_portion
+Starbucks,ES,es,Croissant con mermelada y mantequilla,Bakery,248700,,,no,389,6,39.1,18.5,22.9,15.2,,0.85,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248700,2026-10-11,no_portion
+Starbucks,ES,es,Croissant con queso crema,Bakery,248786,,,no,309,7.2,25,4.4,19.9,13.4,,1.05,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248786,2026-10-11,no_portion
+Starbucks,ES,es,Croissant multicereal con mermelada y mantequilla,Bakery,248798,,,no,486,8.1,49.8,20.6,27.4,15.8,,0.79,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248798,2026-10-11,no_portion
+Starbucks,ES,es,Croissant con mermelada de frambuesa,Bakery,248790,,,no,389,6.1,38.6,18,22.9,15.2,,0.85,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248790,2026-10-11,no_portion
+Starbucks,ES,es,Brookie de Chocolate y Avellana​,Bakery,372872,,,no,584,7.5,55.2,46.8,44.4,25.2,,3.12,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/372872,2026-10-11,no_portion
+Starbucks,ES,es,Toastie 5 Quesos,Sándwiches o bocadillos,131247,,,no,378,17.6,41,3.2,15.6,9.3,,1.86,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/131247,2026-10-11,no_portion
+Starbucks,ES,es,Bagel de jamón y queso con huevo,Sándwiches o bocadillos,403867,,,no,421,28.3,37.6,9,17.1,10.2,,2.16,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/403867,2026-10-11,no_portion
+Starbucks,ES,es,Bagel de salmón y queso crema,Sándwiches o bocadillos,403864,,,no,419,21.6,45.4,12.3,16.6,5.5,,2.34,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/403864,2026-10-11,no_portion
+Starbucks,ES,es,Brioche de pollo asado,Sándwiches o bocadillos,403862,,,no,257,21.6,18.9,6.3,10.5,3.2,,2.41,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/403862,2026-10-11,no_portion
+Starbucks,ES,es,Brioche de pavo y frambuesa,Sándwiches o bocadillos,403860,,,no,368,19.9,50.8,22.5,9.1,4.4,,1.84,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/403860,2026-10-11,no_portion
+Starbucks,ES,es,BAGEL HUEVO & BACON,Sándwiches o bocadillos,347956,,,no,387,19.8,21.1,3.6,24.8,10.8,,2.42,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/347956,2026-10-11,no_portion
+Starbucks,ES,es,Sándwich Pollo Gluten Free,Sándwiches o bocadillos,233187,,,no,288,10.6,18.6,3.2,18.8,5.6,,1.58,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/233187,2026-10-11,no_portion
+Starbucks,ES,es,Egg Sandwich,Sándwiches o bocadillos,138789,,,no,260,11.4,20.5,0.6,14.5,6.9,,0.83,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/138789,2026-10-11,no_portion
+Starbucks,ES,es,Foccacia Pollo,Sándwiches o bocadillos,138645,,,no,255,12.2,24.6,2.3,11.2,3.2,,1.11,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/138645,2026-10-11,no_portion
+Starbucks,ES,es,Focaccia Mortadela,Sándwiches o bocadillos,360572,,,no,276,12.1,18.3,0.8,17,7.2,,1.5,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/360572,2026-10-11,no_portion
+Starbucks,ES,es,Focaccia Pastrami,Sándwiches o bocadillos,360574,,,no,212,12.8,26,1.2,6.1,1.3,,1.43,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/360574,2026-10-11,no_portion
+Starbucks,ES,es,Focaccia Jamon Y Camembert,Sándwiches o bocadillos,360570,,,no,210,12.3,22.5,2.7,7.6,2.9,,1.56,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/360570,2026-10-11,no_portion
+Starbucks,ES,es,Bloomer Pavo Arándanos,Sándwiches o bocadillos,138893,,,no,218,12.4,27.2,5.3,7,3.4,,1.4,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/138893,2026-10-11,no_portion
+Starbucks,ES,es,Bocadillo Jamón Ibérico,Sándwiches o bocadillos,214807,,,no,257,13.3,26.2,0.8,10.7,2.4,,1.94,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214807,2026-10-11,no_portion
+Starbucks,ES,es,Bocadillo jamón ibérico y queso manchego,Sándwiches o bocadillos,214808,,,no,284,15.2,22,0.8,14.6,6,,1.93,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214808,2026-10-11,no_portion
+Starbucks,ES,es,Bagel Salmón y Aguacate,Sándwiches o bocadillos,240048,,,no,58,2.6,4,3.1,3.7,1.5,0,0.42,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/240048,2026-10-11,no_portion
+Starbucks,ES,es,Bagel Brioche con aceite,Sándwiches o bocadillos,248774,,,no,373,7.7,39.2,9.1,20.1,6.2,,1.4,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248774,2026-10-11,no_portion
+Starbucks,ES,es,Bagel Brioche con tomate,Sándwiches o bocadillos,248772,,,no,382,8.1,40.9,10.7,20.2,6.3,,1.42,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248772,2026-10-11,no_portion
+Starbucks,ES,es,Bagel Brioche mermelada y mantequilla,Sándwiches o bocadillos,248778,,,no,372,7.8,53.8,23.7,13.3,9.2,,0.61,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248778,2026-10-11,no_portion
+Starbucks,ES,es,Bagel brioche con jamón ibérico y tomate,Sándwiches o bocadillos,248776,,,no,453,15.1,40.9,10.8,25,7.7,,2.52,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248776,2026-10-11,no_portion
+Starbucks,ES,es,Bagel Brioche con queso crema,Sándwiches o bocadillos,248766,,,no,345,10.5,40.3,10.2,15.5,11,,1.02,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248766,2026-10-11,no_portion
+Starbucks,ES,es,Bagel de cereales con aceíte,Sándwiches o bocadillos,248762,,,no,344,8.2,31.5,2,19.3,3,,1.7,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248762,2026-10-11,no_portion
+Starbucks,ES,es,Bagel de cereales con tomate,Sándwiches o bocadillos,248770,,,no,353,8.7,33.2,3.7,19.4,3,,1.72,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248770,2026-10-11,no_portion
+Starbucks,ES,es,Bagel Brioche mermelada y mantequilla,Sándwiches o bocadillos,248768,,,no,342,8.4,46.1,16.7,12.5,6,,0.91,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248768,2026-10-11,no_portion
+Starbucks,ES,es,Bagel de cereales con jamón ibérico y tomate,Sándwiches o bocadillos,248780,,,no,424,15.7,33.2,3.7,24.2,4.4,,2.82,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248780,2026-10-11,no_portion
+Starbucks,ES,es,Bagel de cereales con queso crema,Sándwiches o bocadillos,248742,,,no,315,11,32.6,3.1,14.7,7.8,,1.32,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248742,2026-10-11,no_portion
+Starbucks,ES,es,"Tostada multicereal aceite, sal y tomate",Sándwiches o bocadillos,214078,,,no,235,3.6,19.3,1.9,15.7,2,,1.16,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214078,2026-10-11,no_portion
+Starbucks,ES,es,Tostada multicereal mantequilla y mermelada,Sándwiches o bocadillos,214080,,,no,297,4.4,40.9,18.2,12.3,6.8,,0.55,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214080,2026-10-11,no_portion
+Starbucks,ES,es,"Tostada multicereal aceite, sal, tomate y jamón",Sándwiches o bocadillos,214082,,,no,245,8.2,15.7,1.6,16.3,2.7,,1.77,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214082,2026-10-11,no_portion
+Starbucks,ES,es,Tostada aceite y sal,Sándwiches o bocadillos,214066,,,no,397,5.2,34.7,0.8,26,3.4,,2.21,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214066,2026-10-11,no_portion
+Starbucks,ES,es,"Tostada aceite, sal y tomate",Sándwiches o bocadillos,214068,,,no,231,3.4,21.1,1.9,14.7,1.9,,0.51,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214068,2026-10-11,no_portion
+Starbucks,ES,es,"Tostada aceite, sal, tomate y jamón",Sándwiches o bocadillos,214072,,,no,241,8,17.2,1.6,15.5,2.6,,1.25,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214072,2026-10-11,no_portion
+Starbucks,ES,es,Tostada crema de queso,Sándwiches o bocadillos,214074,,,no,245,7,33.3,1.5,8.9,5.4,,0.97,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214074,2026-10-11,no_portion
+Starbucks,ES,es,Tostada Multicereal aceite y sal,Sándwiches o bocadillos,214076,,,no,407,5.7,31.8,0.8,28,3.6,,2.06,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214076,2026-10-11,no_portion
+Starbucks,ES,es,Sándwich de nueces y gorgonzola,Sándwiches o bocadillos,366511,,,no,564,14.8,44.4,3.8,33.3,15.7,,2.22,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/366511,2026-10-11,no_portion
+Starbucks,ES,es,Wrap Egg & Beef,Sándwiches o bocadillos,366605,,,no,581,26.4,50.4,4.3,31.2,13.4,,4.56,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/366605,2026-10-11,no_portion
+Starbucks,ES,es,Wrap de Salmón Ahumado y Queso Crema,Sándwiches o bocadillos,366527,,,no,603,19,46.7,2.8,36.9,10.2,,4.1,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/366527,2026-10-11,no_portion
+Starbucks,ES,es,"Sandwich de pavo, manzana y mayonesa con trufa",Sándwiches o bocadillos,366609,,,no,511,27.6,45,10.3,23.6,9.3,,2.15,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/366609,2026-10-11,no_portion
+Starbucks,ES,es,Sandwich de mousse de pato y pollo con mermelada de arándanos,Sándwiches o bocadillos,366517,,,no,395,11.7,49.5,11.1,16.5,5.2,,1.8,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/366517,2026-10-11,no_portion
+Starbucks,ES,es,Bagel de semillas de porchetta y queso ahumado,Sándwiches o bocadillos,366595,,,no,406,19.2,35,6.8,21,6.4,,2.1,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/366595,2026-10-11,no_portion
+Starbucks,ES,es,Muffin Arandanos,Muffins,131451,,,no,351,4.9,46,25,17,2.4,,0.46,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/131451,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Cake Pop,Cakes,416299,,,no,162,1.2,17.8,14.4,9.5,4.7,,0.11,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/416299,2026-10-11,no_portion
+Starbucks,ES,es,Black Cat Cake Pop,Cakes,416237,,,no,154,1.2,18.9,15.4,8,3.8,,0.08,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/416237,2026-10-11,no_portion
+Starbucks,ES,es,Bizcocho de Limón,Cakes,129391,,,no,430,5.5,44.2,27.1,25.4,7.6,,0.61,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/129391,2026-10-11,no_portion
+Starbucks,ES,es,Carrot Cake,Cakes,131179,,,no,419,5.4,39,28,27,10,,0.7,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/131179,2026-10-11,no_portion
+Starbucks,ES,es,Cake chocolate porción,Cakes,213342,,,no,382,5.3,42,32,21,12.2,,0.78,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/213342,2026-10-11,no_portion
+Starbucks,ES,es,CAKE POP BIRTHDAY,Cakes,347958,,,no,170,1.6,18.7,8.5,9.8,4.7,,0.21,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/347958,2026-10-11,no_portion
+Starbucks,ES,es,Cake Pop Pollito,Cakes,403910,,,no,172,1.7,191.5,14,9.8,4.9,,0.22,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/403910,2026-10-11,no_portion;energy_mismatch_portion(172/861)
+Starbucks,ES,es,Glaseado de azúcar,Glaseados,131335,,,no,455,5.7,43,15,29,14,,0.55,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/131335,2026-10-11,no_portion
+Starbucks,ES,es,Glaseado Estilo Dubai​,Glaseados,372867,,,no,330,5.2,29.5,15.8,20.8,7.9,,0.72,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/372867,2026-10-11,no_portion
+Starbucks,ES,es,Cookie 3 Chocolates,Cookies,370045,,,no,519,7.7,66.2,40.5,24.4,9.2,,0.6,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/370045,2026-10-11,no_portion
+Starbucks,ES,es,Cookie Cacao Y Tres Chocolates,Cookies,370049,,,no,519,7.7,66.2,40.5,24.4,9.2,,0.6,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/370049,2026-10-11,no_portion
+Starbucks,ES,es,Cookie Choco Blanco Y Macadamia,Cookies,370047,,,no,539,7,66.2,40.3,27.1,12.9,,1,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/370047,2026-10-11,no_portion
+Starbucks,ES,es,Meteorites Candy,Snacks,248758,,,no,356,0.5,89,67,0.5,0.1,,0.28,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/248758,2026-10-11,no_portion
+Starbucks,ES,es,Biscotti de Almendra,Snacks,128477,,,no,417,12.8,66.5,34.9,11.1,2.4,,0.1,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/128477,2026-10-11,no_portion
+Starbucks,ES,es,Patatas Aceite de Oliva,Snacks,138773,,,no,508,7.3,52,0.5,29,4.6,,0.7,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/138773,2026-10-11,no_portion
+Starbucks,ES,es,Pop Corn Sweet&Salty,Snacks,138653,,,no,479,5,62.2,33.2,22.3,3.7,,1.39,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/138653,2026-10-11,no_portion
+Starbucks,ES,es,Palomitas Sal Himalaya,Snacks,138647,,,no,430,8.1,61.8,2,15,1.9,,2.9,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/138647,2026-10-11,no_portion
+Starbucks,ES,es,Pajita de Cookie,Snacks,134909,,,no,452,6.9,76,47,13,7.6,,0.38,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/134909,2026-10-11,no_portion
+Starbucks,ES,es,Mix de frutas y frutos secos,Snacks,134985,,,no,643,21,22,4.7,51,4.6,,0.5,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/134985,2026-10-11,no_portion
+Starbucks,ES,es,Chocolate negro y crema de cacahuete,Snacks,239992,,,no,596,15,30,22,45,20,,0.2,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/239992,2026-10-11,no_portion
+Starbucks,ES,es,Cinnamon Bites Sin Gluten,Gluten Free,397832,,,no,230,1.1,30,9.5,11,8,,0.75,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/397832,2026-10-11,no_portion
+Starbucks,ES,es,Palmeritas sin Gluten,Gluten Free,397764,,,no,237,1,34.5,10,10.5,7.5,,0.7,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/397764,2026-10-11,no_portion
+Starbucks,ES,es,Banana Bread sin Gluten,Gluten Free,397824,,,no,367,2.6,59,30,13.2,8.5,,0.98,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/397824,2026-10-11,no_portion
+Starbucks,ES,es,Brownie Sin Gluten y sin azúcar,Gluten Free,397778,,,no,212,3.7,28.2,0.3,10.8,3.5,,0.4,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/397778,2026-10-11,no_portion
+Starbucks,ES,es,Muffin de vainilla sin gluten,Gluten Free,214796,,,no,428,3.4,45.2,28.2,26,3,,0.51,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214796,2026-10-11,no_portion
+Starbucks,ES,es,Cookie Choco sin gluten,Gluten Free,139321,,,no,459,5.6,66.8,26.3,18.8,12.1,,0.8,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/139321,2026-10-11,no_portion
+Starbucks,ES,es,Muffin Vainilla sin gluten,Gluten Free,139319,,,no,492,3.9,52,32.4,29,3.4,,0.59,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/139319,2026-10-11,no_portion
+Starbucks,ES,es,Bowl Matcha Chia,Fruit and Yoghurt,355432,,,no,152,3.2,18.3,16,7,3.6,,0.1,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/355432,2026-10-11,no_portion
+Starbucks,ES,es,Macedonia,Fruit and Yoghurt,139335,,,no,42,1,11,8,0,0,,0,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/139335,2026-10-11,no_portion
+Starbucks,ES,es,Ensalada Fusilli,Ensaladas y DIPS,214799,,,no,252,7.1,25.6,1.5,13.1,2.8,,0.37,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/214799,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Latte (Short),Bebidas Espresso > Latte,213394,,,yes,110,2.6,12.4,12,5.2,4,1.5,0.12,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/213394,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Latte (Tall),Bebidas Espresso > Latte,128185,,,yes,92,2.7,10.8,10.5,4,3.1,1.2,0.12,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/128185,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Latte (Venti),Bebidas Espresso > Latte,128227,,,yes,89,2.8,10.8,10.5,3.6,2.8,1.2,0.12,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/128227,2026-10-11,no_portion
+Starbucks,ES,es,Iced Pumpkin Spice Latte (Tall),Bebidas Espresso > Latte,127985,,,yes,43,1.7,6.8,6.6,0.8,0.7,0.8,0.07,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/127985,2026-10-11,no_portion
+Starbucks,ES,es,Iced Pumpkin Spice Latte (Venti),Bebidas Espresso > Latte,130205,,,yes,41,1.4,7,6.7,0.6,0.6,0.9,0.07,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/130205,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Frappuccino (Tall),Frappuccino ® > Coffee Frappuccino®,128079,,,yes,74,1,10.4,10.2,3,2.1,0.6,0.13,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/128079,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Frappuccino (Venti),Frappuccino ® > Coffee Frappuccino®,130589,,,yes,75,0.9,11.4,11.1,2.7,1.9,0.7,0.13,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/130589,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Creme Frappccino (Tall),Frappuccino ® > Cream Frappuccino®,129899,,,yes,72,1.2,9.2,9.1,3.3,2.3,0.6,0.12,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/129899,2026-10-11,no_portion
+Starbucks,ES,es,Pumpkin Spice Creme Frappccino (Venti),Frappuccino ® > Cream Frappuccino®,130619,,,yes,72,1.1,10.1,9.9,2.9,2,0.7,0.13,,,,,,,,,per_portion,https://www.starbucks.es/menu/product/130619,2026-10-11,no_portion

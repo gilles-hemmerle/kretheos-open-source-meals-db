@@ -1,0 +1,55 @@
+chain,country,language,product_name,category,product_key,portion_size,portion_unit,is_drink,energy_kcal_per_portion,protein_g_per_portion,carbohydrate_g_per_portion,sugars_g_per_portion,fat_g_per_portion,saturated_fat_g_per_portion,fibre_g_per_portion,salt_g_per_portion,energy_kcal_per_100,protein_g_per_100,carbohydrate_g_per_100,sugars_g_per_100,fat_g_per_100,saturated_fat_g_per_100,fibre_g_per_100,salt_g_per_100,values_given,source_url,date_collected,sanity_flags
+Dunkin',CH,en,Chocolate Lovers,Donuts,,,,no,360,5,43,22,19,9,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Powdered White Chocolate,Donuts,,,,no,320,4,32,13,19,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Frosted White Chocolate,Donuts,,,,no,340,4,37,18,19,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Glazed Ring,Donuts,,,,no,230,3,25,10,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Chocolate Frosted Ring,Donuts,,,,no,230,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Chocolate Frosted with Sprinkles,Donuts,,,,no,250,3,30,13,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Caramel Frosted Ring,Donuts,,,,no,240,3,23,18,14,7,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Cinnamon Powdered Ring,Donuts,,,,no,210,3,21,15,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Strawberry Frosted Ring,Donuts,,,,no,230,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Strawberry Frosted Rainbow Sprinkle Ring,Donuts,,,,no,250,3,31,15,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Vanilla Frosted Ring,Donuts,,,,no,230,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Vanilla Frosted with Rainbow Sprinkles,Donuts,,,,no,250,3,31,15,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Caramel Frosted Ring with Chocolate Sprinkles,Donuts,,,,no,270,4,30,13,16,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Frosted Ring with Seasonal Color,Donuts,,,,no,230,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Sugared Raspberry Jelly Shell,Donuts,,,,no,250,3,31,15,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Boston Crème,Donuts,,,,no,280,4,33,17,15,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Powdered Bavarian Crème Shell,Donuts,,,,no,260,4,28,12,15,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Double Caramel,Donuts,,,,no,280,4,32,15,16,7,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Nougat Creme,Donuts,,,,no,290,4,30,15,17,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Sugared Nougat Creme,Donuts,,,,no,290,4,30,15,17,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Powdered Lemon Shell,Donuts,,,,no,260,3,31,14,14,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Frosted Lemon Shell,Donuts,,,,no,300,3,36,19,16,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Cinnamon Powdered Apple Shell,Donuts,,,,no,240,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Powdered Strawberry Shell,Donuts,,,,no,240,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Frosted Strawberry Shell,Donuts,,,,no,270,3,33,17,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Frosted Heart Shell,Donuts,,,,no,340,3,37,18,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion;energy_mismatch_portion(340/279)
+Dunkin',CH,en,Glazed Yeast Munchkin,Donuts,,,,no,50,1,6,3,2.5,1.5,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Powdered Yeast Munchkin,Donuts,,,,no,50,1,6,2,2.5,1.5,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Cinnamon Powdered Yeast Munchkin,Donuts,,,,no,50,1,6,2,2.5,1.5,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Sugared Jelly Filled Munchkin,Donuts,,,,no,50,1,7,4,2.5,1.5,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Powdered Bavarian Filled Munchkin,Donuts,,,,no,70,1,5,2,2.5,1,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion;energy_mismatch_portion(70/46)
+Dunkin',CH,en,Powdered Raspberry Filled Munchkin,Donuts,,,,no,60,1,7,4,3,1.5,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Smiley Face,Donuts,,,,no,290,3,34,18,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Chocolate orange,Donuts,,,,no,250,3,31,14,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Smiley Santa,Donuts,,,,no,290,3,34,18,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Green Christmas Star,Donuts,,,,no,280,3,37,20,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Red Christmas Star,Donuts,,,,no,280,3,37,20,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Apple Crumble,Donuts,,,,no,300,4,36,19,15,7,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Apple Cinamon,Donuts,,,,no,240,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Lemon ring with sprinkles,Donuts,,,,no,230,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Nougat Hazelnut crunch,Donuts,,,,no,350,4,39,22,19,9,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Strawberries & Cream,Donuts,,,,no,300,4,38,22,15,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Lemon Meringue,Donuts,,,,no,300,4,38,22,15,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Maple Iced,Donuts,,,,no,230,3,27,11,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Cookies and cream,Donuts,,,,no,300,4,37,18,16,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Cinammon Glazed,Donuts,,,,no,230,3,25,10,13,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Sugar Raised,Donuts,,,,no,220,3,24,9,12,6,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Double Chocolate,Donuts,,,,no,310,3,32,16,18,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Glazed chocolate munchkins,Donuts,,,,no,60,1,7,4,4,2,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Chocolate munchkins,Donuts,,,,no,70,1,5,2,3.5,1.5,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion;energy_mismatch_portion(70/56)
+Dunkin',CH,en,Glazed chocolate cake,Donuts,,,,no,310,3,32,16,18,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,chocolate coated munchkins,Donuts,,,,no,70,1,7,4,4,2,0,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Chocolate Cake,Donuts,,,,no,270,3,23,8,18,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion
+Dunkin',CH,en,Old Fashioned,Donuts,,,,no,270,3,24,9,17,8,1,,,,,,,,,,per_portion,https://neu.dunkindonuts.ch/wp-content/uploads/DD_Ingredients_Donuts.pdf,2026-10-11,no_portion

@@ -1,0 +1,146 @@
+chain,country,language,product_name,category,product_key,portion_size,portion_unit,is_drink,energy_kcal_per_portion,protein_g_per_portion,carbohydrate_g_per_portion,sugars_g_per_portion,fat_g_per_portion,saturated_fat_g_per_portion,fibre_g_per_portion,salt_g_per_portion,energy_kcal_per_100,protein_g_per_100,carbohydrate_g_per_100,sugars_g_per_100,fat_g_per_100,saturated_fat_g_per_100,fibre_g_per_100,salt_g_per_100,values_given,source_url,date_collected,sanity_flags
+Burger King,FR,fr,Whopper,Burgers,20100,,,no,629,28,49,12,35,9.4,,2.5,226,10,17,4.2,13,3.4,,0.89,both,https://www.burgerking.fr/produit/whopper,2026-10-11,no_portion
+Burger King,FR,fr,Moyennes frites,Snacks & Sauces > Frites & Gaufrettes,50002,,,no,309,3.8,46,0.5,13,4.1,,0.46,266,3.3,40,0.5,11,3.6,,0.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Onion Rings (6),Snacks & Sauces > Onion Rings,50102,,,no,251,4.3,35,2.8,11,1.3,,1.1,279,4.8,38,3.1,13,1.5,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fries Cheddar & Bacon,Snacks & Sauces > King Fries,51105,,,no,538,12,66,2.3,26,11,,1.8,270,5.8,33,1.1,13,5.5,,0.92,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fries Cheddar & Crispy Onions,Snacks & Sauces > King Fries,50480,,,no,561,8.8,71,3.9,28,12,,1.6,281,4.4,35,1.9,14,6,,0.8,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Carotte,Salades,60116,,,no,22,0,3.8,3.2,0.3,0.3,,0.01,36,0.8,6.4,5.4,0.5,0.5,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fries sauce Raclette & Bacon,Snacks & Sauces > King Fries,P0000713,,,no,530,25,75,13,14,6.1,,3.5,266,12,38,6.4,7.3,3.1,,1.8,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fries Double Cheddar,Snacks & Sauces > King Fries,P0000761,,,no,563,10,63,4.3,29,13,,2.8,257,4.7,29,2,13,5.7,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Petite salade,Salades,P0001212,,,no,51,4,1.5,0.9,3,1.8,,0.16,73,5.7,2.1,1.4,4.3,2.6,,0.23,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Moyenne Gaufrette Fries,Snacks & Sauces > Frites & Gaufrettes,P0001225,,,no,247,2.4,21,0.5,11,1.1,,0.67,284,3.5,30,0.5,16,1.6,,0.97,both,https://www.burgerking.fr/produit/waffle-fries-dpl,2026-10-11,no_portion;energy_mismatch_portion(247/193)
+Burger King,FR,fr,Vittel (33cl),Desserts & Boissons > Vittel®,81350,,,yes,0,0.5,0.5,0.5,0.5,0.1,,0.01,0,0.5,0.5,0.5,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola Zéro Sucres (40cl),Desserts & Boissons > Coca-Cola® Zéro Sucres,86702,,,yes,1,0.5,0.5,0.5,0.5,0.1,,0.12,0,0.5,0.5,0.5,0.5,0.1,,0.03,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola (40cl),Desserts & Boissons > Coca-Cola®,80102,,,yes,168,0.5,42,42,0.5,0.1,,0.01,42,0.5,11,11,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sprite Goût Original sans sucres (40cl),Desserts & Boissons > Sprite® Goût Original sans sucres,87011,,,yes,5,0.5,0.5,0.5,0.5,0.1,,0.16,1,0.5,0.5,0.5,0.5,0.1,,0.04,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Fanta Goût Original sans sucres (40cl),Desserts & Boissons > Fanta® Goût Original sans sucres,87016,,,yes,8,0.5,1.3,1.3,0.5,0.1,,0.24,2,0.5,0.5,0.5,0.5,0.1,,0.06,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Fuze Tea Pêche Hibiscus (40cl),Desserts & Boissons > Fuze Tea Pêche Hibiscus,P0000748,,,yes,68,0,16,16,0,0,,0.08,17,0,3.9,3.9,0,0,,0.02,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Oasis Tropical (40cl),Desserts & Boissons > Oasis Tropical,P0000751,,,yes,26,0,4.6,4.4,0,0,,0.05,6,0,1.2,1.1,0,0,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Red Bull Wings Cup (25cl),Desserts & Boissons,P0000833,,,yes,115,0,28,28,0,0,,0.25,46,0,11,11,0,0,,0.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Red Bull Mûre Givrée & Vanille (25cl),Desserts & Boissons,P0000835,,,yes,115,0,28,28,0,0,,0.25,46,0,11,11,0,0,,0.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Perrier (33cl),Desserts & Boissons,P0001182,,,yes,210,0.5,53,53,0.5,0.1,,0.01,42,0.5,11,11,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola Cherry Zéro Sucres (40cl),Desserts & Boissons > Coca-Cola® Cherry Zéro Sucres,P0001251,,,yes,2,0.5,0.5,0.5,0.5,0.1,,0.01,0,0.5,0.5,0.5,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Ice Burger Lotus Biscoff,Desserts & Boissons > Ice Burger,P0001247,,,no,364,10,51,20,13,3.5,,1.1,282,7.8,39,15,10,2.7,,0.86,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Ice Burger au Nutella,Desserts & Boissons > Ice Burger,P0001203,,,no,418,11,56,29,16,2.6,,1,299,8.2,40,21,11,1.8,,0.72,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Double Whopper Cheese,Burgers,20202,,,no,934,52,49,12,58,21,,3.5,246,14,13,3.3,15,5.6,,0.94,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Steakhouse,Burgers,24570,,,no,829,37,54,15,51,21,,3.3,294,13,19,5.3,18,7.4,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Double Steakhouse,Burgers,21750,,,no,1134,61,55,16,74,33,,4.3,295,16,14,4.1,19,8.5,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Chicken Louisiane Steakhouse,Burgers,P0000792,,,no,846,38,68,15,46,15,,4.6,267,12,22,4.8,15,4.6,,1.5,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Big King,Burgers,24555,,,no,482,27,30,6.3,28,12,,2.4,269,15,17,3.5,16,6.5,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Big King XXL,Burgers,24750,,,no,964,56,49,12,59,25,,4.4,267,16,14,3.2,16,6.9,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Big Fish,Burgers,30400,,,no,484,20,41,8.1,26,4.3,,2.5,250,10,21,4.2,14,2.2,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,CBK,Burgers,P0001496,,,no,795,30,62,10,46,13,,3.6,317,12,25,4.1,18,5.3,,1.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Cheddar CBK,Menus > mains,P0001558,,,no,981,31,82,11,58,17,,4.5,322,10,27,3.7,19,5.7,,1.5,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Master Poulet Raclette Poivre,Burgers,P0001590,,,no,894,39,64,11,54,12,,5,290,13,21,3.7,18,3.8,,1.6,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Tortilla Cheese & Bacon,Tortillas & Wraps > King Tortillas,P0001319,,,no,755.71,25,51,7.2,49,13,,3.1,322.4,11,22,3.1,21,5.5,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Smoky Chicken,Burgers,P0001385,,,no,585,19,42,6.2,37,7,,2.2,301,9.9,21,3.2,19,3.6,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Wrap Chicken Louisiane,Tortillas & Wraps > King Wraps,P0000538,,,no,726,23,53,6.5,44,13,,3.2,289,9.3,21,2.6,18,5.2,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Nuggets (7),Snacks & Sauces > King Nuggets®,P0001072,,,no,260,15,25,0.8,11,1.3,,1.4,217,12,21,0.7,9,1.1,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Nuggets (10),Snacks & Sauces > King Nuggets®,P0001073,,,no,393,24,33,30,19,2.6,,2.2,257,15,22,20,13,1.7,,1.5,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Caesar Chicken Bowl,Salades,P0001211,,,no,529,25,32,4,33,10,,2.5,179,8.3,11,1.4,11,3.4,,0.85,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Cheddar Steakhouse,Menus > mains,P0001359,,,no,1023,38,75,16,62,24,,3.9,304,11,22,4.8,19,7.1,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Cheddar Whopper,Menus > mains,P0001358,,,no,889,34,74,14,52,17,,3.9,251,9.6,21,4,15,4.7,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Master Rösti Raclette Poivre,Burgers,P0001591,,,no,1155,47,70,14,77,20,,4.2,286,12,17,3.6,19,4.9,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Master Raclette Ail Des Ours,Burgers,P0001589,,,no,885,43,49,11,58,19,,3.7,292,14,16,3.6,19,6.2,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Master Raclette Poivre,Burgers,P0001043,,,no,898,43,49,11,60,18,,3.4,296,14,16,3.7,20,6.1,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Master Raclette Fumée,Burgers,P0000633,,,no,841,43,50,11,53,19,,3.5,277,14,17,3.7,17,6.3,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Double Cheese Bacon,Burgers,P0001092,,,no,482,29,33,7.6,25,12,,2.2,280,17,19,4.4,15,6.8,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Double Cheese Bacon XXL,Burgers,28400,,,no,932,60,48,11,55,26,,4.7,275,18,14,3.4,16,7.7,,1.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Veggie Whopper,Burgers,20170,,,no,595,27,57,13,29,4.9,,3.1,206,9.2,20,4.5,10,1.7,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Veggie Steakhouse,Burgers,P0000640,,,no,788,33,64,15,44,15,,3.7,270,11,22,5.1,15,5.1,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Tortilla Veggie Cheese & Bacon,Tortillas & Wraps > King Tortillas,P0001409,,,no,732.9,22,54,7.1,45,10,,3.5,295.52,8.7,22,2.9,18,4.1,,1.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Veggie Chicken Louisiane Steakhouse,Burgers,P0000793,,,no,783,24,61,12,45,10,,4.5,281,8.6,22,4.3,16,3.7,,1.6,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Wrap Veggie Chicken Louisiane,Tortillas & Wraps > King Wraps,P0001361,,,no,710,20,58,7.3,41,11,,3,267,7.6,22,2.8,15,4,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Veggie Caesar Chicken Bowl,Menus > others,P0001360,,,no,512,22,36,4.1,29,8.1,,2.9,165,7,12,1.3,9.3,2.6,,0.94,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Cheeseburger,Burgers,20600,,,no,305,16,29,6.2,13,5.9,,1.7,259,14,25,5.3,11,5,,1.5,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Hamburger,Burgers,20500,,,no,266,14,29,5.8,10,3.9,,1.3,250,13,27,5.5,10,3.6,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Cheeseburger,Menus > mains,20560,,,no,301,16,29,6.2,13,5.8,,1.4,280,15,27,5.7,12,5.5,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Hamburger,Menus > mains,20550,,,no,262,14,29,5.8,9.9,3.5,,0.93,273,15,30,6,10,3.6,,1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Fishburger,Menus > mains,30445,,,no,325,17,37,5.9,12,1.4,,1.3,241,12,28,4.4,8.7,1,,0.96,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Nuggets (4),Snacks & Sauces > King Nuggets®,50201,,,no,174,10,17,0.6,7.2,0.9,,0.9,217,12,21,0.7,9,1.1,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Petites frites,Snacks & Sauces > Frites & Gaufrettes,50001,,,no,239,3,36,0.5,10,3.2,,0.36,266,3.3,40,0.5,11,3.6,,0.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola Zéro Sucres (25cl),Desserts & Boissons > Coca-Cola® Zéro Sucres,86701,,,yes,1,0.5,0.5,0.5,0.5,0.1,,0.08,0,0.5,0.5,0.5,0.5,0.1,,0.03,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola (25cl),Desserts & Boissons > Coca-Cola®,80101,,,yes,105,0.5,27,27,0.5,0.1,,0.01,42,0.5,11,11,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sprite Goût Original sans sucres (25cl),Desserts & Boissons > Sprite® Goût Original sans sucres,87010,,,yes,3,0.5,0.5,0.5,0.5,0.1,,0.1,1,0.5,0.5,0.5,0.5,0.1,,0.04,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Fanta Goût Original sans sucres (25cl),Desserts & Boissons > Fanta® Goût Original sans sucres,87015,,,yes,5,0.5,0.8,0.8,0.5,0.1,,0.15,2,0.5,0.5,0.5,0.5,0.1,,0.06,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Fuze Tea Pêche Hibiscus (25cl),Desserts & Boissons > Fuze Tea Pêche Hibiscus,P0000747,,,yes,43,0,9.8,9.8,0,0,,0.05,17,0,3.9,3.9,0,0,,0.02,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Oasis Tropical (25cl),Desserts & Boissons > Oasis Tropical,P0000750,,,yes,16,0,2.9,2.8,0,0,,0.03,6,0,1.2,1.1,0,0,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola Cherry Zéro Sucres (25cl),Desserts & Boissons > Coca-Cola® Cherry Zéro Sucres,P0001250,,,yes,1,0.5,27,27,0.5,0.1,,0.01,0,0.5,0.5,0.5,0.5,0.1,,0.01,both,https://www.burgerking.fr/produit/coca-cola-cherry-sans-sucres-25cl,2026-10-11,no_portion;energy_mismatch_portion(1/114)
+Burger King,FR,fr,Nectar de pommes C'est qui le Patron ?! (20CL),Desserts & Boissons,P0000403,,,yes,90,0.2,21,20,0.5,0.1,,0.01,45,0.1,11,10,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Pom'Potes Pomme,Desserts & Boissons,64800,,,no,55,0.5,11,9.9,0.5,0.2,,0.01,61,0.5,12,11,0.6,0.2,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fruits,Desserts & Boissons,64805,,,no,36,0.5,7.8,6.2,0.5,0.1,,0.01,60,0.5,13,10,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Yaourt,Desserts & Boissons,P0000622,,,no,66,3,11,11,1.1,0.7,,0.77,66,3,11,11,1.1,0.7,,0.77,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Mini King Sundae Vanille,Desserts & Boissons > King Sundae,60512,,,no,66,1.45,11,10,1.75,1.25,,0.18,132,2.9,22,20,3.5,2.5,,0.36,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Mini King Sundae Chocolat,Desserts & Boissons > King Sundae,60528,,,no,83.43,1.57,13.98,11.76,2.02,1.41,,0.19,146.37,2.75,24.53,20.63,3.54,2.47,,0.33,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Mini King Sundae Caramel,Desserts & Boissons > King Sundae,60538,,,no,81.96,1.79,14.18,12.57,1.75,1.25,,0.2,143.79,3.14,24.88,22.05,3.07,2.19,,0.35,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Donut Whouaf,Menus > sweets,P0001506,,,no,1000,3.8,21,7.6,16,8.6,,0.53,1852,7.1,39,14,29,16,,0.98,both,https://www.burgerking.fr/produit/mini-donut-pat-patrouille,2026-10-11,no_portion;energy_kcal_per_100_out_of_range;energy_mismatch_portion(1000/243);energy_mismatch_100(1852/445)
+Burger King,FR,fr,Pom'Potes Pêche,Desserts & Boissons,P0001560,,,no,1107,41,74,16,70,22,,3.2,291,11,19,4.2,18,5.7,,0.83,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Bacon,Snacks & Sauces > Petits Burgers,P0001387,,,no,403.43,18,31,5.1,23,7,,1.9,319.07,14,24,4.1,18,5.6,,1.5,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Chicken Bacon,Snacks & Sauces > Petits Burgers,P0001388,,,no,419.54,14,41,5.5,21,3.3,,2.1,301.96,10,30,3.9,15,2.4,,1.5,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fish,Snacks & Sauces > Petits Burgers,P0001389,,,no,397.9,17,38,4.4,19,2.1,,1.3,263.68,11,25,2.9,13,1.4,,0.89,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Baby Big King,Menus > mains,P0001259,,,no,482,27,30,6.3,28,12,,2.4,269,15,17,3.5,16,6.5,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Baby Whopper,Menus > mains,P0001260,,,no,629,28,49,12,35,9.4,,2.5,226,10,17,4.2,13,3.4,,0.89,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Baby Big King,Menus > mains,P0001256,,,no,297,14,24,5.6,16,6.1,,1.2,284,14,23,5.4,15,5.8,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Baby Whopper,Menus > mains,P0001257,,,no,297,12,23,5.6,14,4.3,,0.95,284,11,21,5,13,3.9,,0.85,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Krispper Tenders x5,À partager > Krispper Tenders,P0001269,,,no,551,40,35,0.5,28,3.2,,3.4,267,20,17,0.5,14,1.5,,1.7,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Krispper Tenders x10,À partager > Krispper Tenders,P0001270,,,no,1101,81,71,0.8,56,6.4,,6.9,267,20,17,0.5,14,1.5,,1.7,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Krispper Tenders x2,À partager > Krispper Tenders,P0001268,,,no,220,16,14,0.5,11,1.3,,1.4,267.01,20,17,0.5,14,1.5,,1.7,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Kingbox 20 King Nuggets,À partager > Kingbox,50226,,,no,868,48,85,2.8,36,4.2,,4.7,217,12,21,0.7,9,1.1,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Tortilla Extra Cheddar,Tortillas & Wraps > King Tortillas,P0001383,,,no,941.64,26,70,8.2,61,17,,4,326.73,9.2,24,2.9,21,5.8,,1.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Grandes frites,Snacks & Sauces > Frites & Gaufrettes,50003,,,no,423,5.3,63,0.5,18,5.7,,0.64,266,3.3,40,0.5,11,3.6,,0.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Grande Gaufrette Fries,Snacks & Sauces > Frites & Gaufrettes,P0001226,,,no,349,4.3,37,0.5,20,2,,1.2,284,3.5,30,0.5,16,1.6,,0.97,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Chili Cheese (4),Snacks & Sauces > Chili Cheese,50659,,,no,236,7,20,0.8,14,5.1,,1.1,295,8.8,26,1,18,6.4,,1.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Chili Cheese (6),Snacks & Sauces > Chili Cheese,50660,,,no,354,11,31,1.2,21,7.6,,1.7,295,8.8,26,1,18,6.4,,1.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Chili Cheese (9),Snacks & Sauces > Chili Cheese,50662,,,no,531,16,46,1.8,32,11,,2.5,295,8.8,26,1,18,6.4,,1.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Onion Rings (4),Snacks & Sauces > Onion Rings,50101,,,no,167,2.9,23,1.9,7.6,0.9,,0.7,279,4.8,38,3.1,13,1.5,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Onion Rings (9),Snacks & Sauces > Onion Rings,50103,,,no,377,6.5,52,4.2,17,2,,1.6,279,4.8,38,3.1,13,1.5,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Cheddar XXL,Snacks & Sauces > Sauces,P0001176,,,no,163,5.9,5.9,4.3,13,9.2,,1.7,271,9,9,6.6,20,14,,2.6,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Smoky Bacon Flavor,Snacks & Sauces > Sauces,P0001271,,,no,160.8,0.5,1.4,0.9,17,1.5,,0.43,643,0.6,5.4,3.6,69,5.8,,1.7,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Moutarde Miel,Snacks & Sauces > Sauces,9040851,,,no,144,0.5,3.5,3.3,14,1.2,,0.4,577,1.4,14,13,57,4.8,,1.6,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Barbecue,Snacks & Sauces > Sauces,51831,,,no,35,0.5,7.8,7,0.5,0.1,,0.3,134,0.8,32,28,0.5,0.1,,1.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Spicy Andalouse,Snacks & Sauces > Sauces,P0000583,,,no,157,0.3,1.6,1.3,17,1.4,,0.43,627,1.3,6.5,5.1,66,5.5,,1.72,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce 1954,Snacks & Sauces > Sauces,52531,,,no,162,0.5,1.2,0.9,17,1.4,,0.33,648,0.5,4.7,3.6,70,5.5,,1.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Creamy Ranch,Snacks & Sauces > Sauces,P0000603,,,no,163,0.5,1.4,1,17,1.5,,0.41,651,0.5,5.7,4.1,70,6,,1.6,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Chili goût Cheese,Snacks & Sauces > Sauces,52521,,,no,152.25,0.35,2.2,1.4,16,1.4,,0.4,621,1.4,8.9,5.6,64,5.7,,1.6,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce pour les frites,Snacks & Sauces > Sauces,51821,,,no,66,0.5,0.5,0.5,7.2,0.6,,0.11,662,0.9,3,2.9,72,5.8,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Ketchup,Snacks & Sauces > Sauces,51811,,,no,10,0.5,2.3,2.3,0.5,0.1,,0.18,102,1.2,23,23,0.5,0.1,,1.8,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Balsamique,Snacks & Sauces > Sauces,52500,,,no,130,0.5,0.7,0.7,14,1.8,,0.45,690,0.5,3.6,3.6,75,9.5,,2.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce Caesar,Snacks & Sauces > Sauces,9205204,,,no,167,0.5,4.4,3,17,1.6,,1.3,418,1.3,9,7.4,42,4,,3.2,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Petit Shake Vanille,Desserts & Boissons > Shakes,P0000505,,,yes,160,5,26,23,4,2.9,,0.27,100,3.1,16,15,2.5,1.8,,0.17,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Expresso,Desserts & Boissons > Cafés,81664,,,yes,27,1.3,0.9,0.5,1.1,0.5,,0,61,2.8,2,0.5,2.5,1.2,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion;energy_mismatch_100(61/42)
+Burger King,FR,fr,Café allongé,Desserts & Boissons > Cafés,81970,,,yes,34,1.6,1.1,0.5,1.4,0.7,,0,21,1,0.7,0.5,0.9,0.4,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion;energy_mismatch_portion(34/23)
+Burger King,FR,fr,King Sundae Caramel,Desserts & Boissons > King Sundae,P0001458,,,no,177,4,30,26,4.6,3.3,,0.51,136,3.1,23,2.5,3.5,2.5,,0.39,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sauce balsamique tomates,Salades,P0000638,,,no,64,0.5,1.1,0.9,6.4,0.7,,0.46,318,0.6,5.5,4.5,32,3.7,,2.3,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Boisson Cacaotée,Desserts & Boissons,82206,,,yes,108,5.4,18,16,1.6,0.5,,0.21,59,3,9.8,8.8,0.9,0.2,,0.11,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Thé vert menthe,Desserts & Boissons > Thés,81802,,,yes,1,0.5,0.5,0.5,0.5,0.1,,0.01,0,0.5,0.5,0.5,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Thé fruits rouges,Desserts & Boissons > Thés,81801,,,yes,1,0.5,0.5,0.5,0.5,0.1,,0.01,0,0.5,0.5,0.5,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Thé Earl Grey,Desserts & Boissons > Thés,P0000522,,,yes,1,0.5,0.5,0.5,0.5,0.1,,0.01,0,0.5,0.5,0.5,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Double expresso,Desserts & Boissons > Cafés,98152,,,yes,48,2.2,1.6,0.5,2,0.9,,0,53,2.4,1.7,0.5,2.2,1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion;energy_mismatch_portion(48/33);energy_mismatch_100(53/36)
+Burger King,FR,fr,Cappuccino,Desserts & Boissons > Cafés,81520,,,yes,87,5.4,6.9,6,3.1,1.8,,0.14,52,3.2,4.1,3.5,1.9,1.1,,0.08,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Café Latté,Desserts & Boissons > Cafés,81965,,,yes,105,6.5,8.7,7.7,3.7,2.2,,0.18,51,3.2,4.2,3.8,1.8,1.1,,0.09,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Cappuccino Gourmand Caramel,Desserts & Boissons > Cafés,64860,,,yes,196,5.8,23,21,7.6,4.9,,0.18,97,2.9,11,10,3.7,2.4,,0.09,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Café Latte Gourmand Caramel,Desserts & Boissons > Cafés,64880,,,yes,179,4.7,21,19,7,4.6,,0.14,108,2.8,13,11,4.2,2.8,,0.08,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Extra King Fusion Lotus Biscoff,Desserts & Boissons > Extra King Fusion,P0001513,,,no,424,6.1,54,43,20,7,,0.82,209,3,27,21,9.8,3.4,,0.41,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Extra King Fusion Dubaï Style,Desserts & Boissons > Extra King Fusion,P0001514,,,no,388,6.6,56,49,15,6.8,,0.7,193,3.3,28,24,7.6,3.4,,0.35,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fusion Dubaï Style,Desserts & Boissons > King Fusion,P0001478,,,no,388,6.6,56,49,15,6.8,,0.7,193,3.3,28,24,7.6,3.4,,0.35,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fusion Lotus Biscoff,Desserts & Boissons > King Fusion,P0001454,,,no,424,6.1,54,43,20,7,,0.82,209,3,27,21,9.8,3.4,,0.41,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Fusion Au Nutella,Desserts & Boissons > King Fusion,P0001453,,,no,417,6.8,57,48,17,3.3,,0.62,235,3.8,32,27,3.9,1.9,,0.35,both,https://www.burgerking.fr/produit/king-fusion-au-nutella-5feb57ce,2026-10-11,no_portion;energy_mismatch_100(235/178)
+Burger King,FR,fr,King Fusion Snickers,Desserts & Boissons > King Fusion,P0001456,,,no,422,8.5,64,54,13,6.3,,0.81,200,4,30,25,6.3,3,,0.38,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Sundae Chocolat,Desserts & Boissons > King Sundae,P0001459,,,no,196,3.8,33,28,4.5,3.1,,0.48,149,2.9,25,21,3.4,2.4,,0.37,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,King Sundae Vanille,Desserts & Boissons > King Sundae,P0001457,,,no,172,3.8,29,26,4.6,3.3,,0.47,132,2.9,22,20,3.5,2.5,,0.36,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Creamy Shake Salted Caramel,Desserts & Boissons > Shakes,83445,,,yes,324,6.6,41,35,14,7.9,,0.4,155,3.2,20,17,6.8,3.8,,0.18,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Creamy Shake Chocolate,Desserts & Boissons > Shakes,P0000503,,,yes,324,6.8,39,33,15,8.3,,0.4,155,3.2,19,16,7.1,4,,0.18,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Muffin Chocolat Noisette,Desserts & Boissons > Pâtisseries,60905,,,no,391,3.7,44,34,22,4.1,,0.56,460,4.3,52,40,25,4.8,,0.66,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Donut Spéculoos Lotus Biscoff,Desserts & Boissons > Pâtisseries,P0001174,,,no,313,4.8,27,14,20,8.6,,0.77,435,6.6,38,19,28,12,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Donut Chocolat Noisette,Desserts & Boissons > Pâtisseries,60890,,,no,313,4.8,27,14,20,8.6,,0.77,435,6.6,38,19,28,12,,1.1,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Cookie Duo Chocolat,Desserts & Boissons > Pâtisseries,P0000604,,,no,400,5.2,51,31,19,9.5,,0.09,471,6.1,60,36,22,11,,0.11,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola Cherry Zéro Sucres (50cl),Desserts & Boissons > Coca-Cola® Cherry Zéro Sucres,P0001252,,,yes,2,0.5,0.5,0.5,0.5,0.1,,0.01,0,0.5,0.5,0.5,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola Zéro Sucres (50cl),Desserts & Boissons > Coca-Cola® Zéro Sucres,86703,,,yes,2,0.5,0.5,0.5,0.5,0.1,,0.15,0,0.5,0.5,0.5,0.5,0.1,,0.03,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Fanta Goût Original sans sucres (50cl),Desserts & Boissons > Fanta® Goût Original sans sucres,87017,,,yes,10,0.5,1.6,1.6,0.5,0.1,,0.3,2,0.5,0.5,0.5,0.5,0.1,,0.06,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Sprite Goût Original sans sucres (50cl),Desserts & Boissons > Sprite® Goût Original sans sucres,87012,,,yes,6,0.5,0.5,0.5,0.5,0.1,,0.2,1,0.5,0.5,0.5,0.5,0.1,,0.04,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Vittel (50cl),Desserts & Boissons > Vittel®,81305,,,yes,0,0.5,0.5,0.5,0.5,0.1,,0.01,0,0.5,0.5,0.5,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Coca-Cola (50cl),Desserts & Boissons > Coca-Cola®,80103,,,yes,210,0.5,53,53,0.5,0.1,,0.01,42,0.5,11,11,0.5,0.1,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Oasis Tropical (50cl),Desserts & Boissons > Oasis Tropical,P0000752,,,yes,32,0,5.8,5.5,0,0,,0.07,6,0,1.2,1.1,0,0,,0.01,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Fuze Tea Pêche Hibiscus (50cl),Desserts & Boissons > Fuze Tea Pêche Hibiscus,P0000749,,,yes,85,0,20,20,0,0,,0.1,17,0,3.9,3.9,0,0,,0.02,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Bacon & Cheese,King Breakfast,P0000702,,,no,412,18,50,12,15,7.3,,2.3,265,11,32,7.4,9.4,4.7,,1.5,both,https://www.burgerking.fr/carte,2026-10-11,no_portion
+Burger King,FR,fr,Double CBK,CBK,P0001497,,,no,1110,46,74,12,68,21,,5,317,13,21,3.5,20,5.9,,1.4,both,https://www.burgerking.fr/carte,2026-10-11,no_portion

@@ -1,0 +1,65 @@
+chain,country,language,product_name,category,product_key,portion_size,portion_unit,is_drink,energy_kcal_per_portion,protein_g_per_portion,carbohydrate_g_per_portion,sugars_g_per_portion,fat_g_per_portion,saturated_fat_g_per_portion,fibre_g_per_portion,salt_g_per_portion,energy_kcal_per_100,protein_g_per_100,carbohydrate_g_per_100,sugars_g_per_100,fat_g_per_100,saturated_fat_g_per_100,fibre_g_per_100,salt_g_per_100,values_given,source_url,date_collected,sanity_flags
+KFC,FR,fr,Crousti'Kream M&Ms,DESSERTS,84024,,,no,206.8,2.5,23.5,19.4,10.9,4.3,2.5,0.1,279.5,3.4,31.7,26.2,14.7,5.8,3.4,0.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Crousti'Kream au Nutella,DESSERTS,84010,,,no,369,5.2,54.4,41.3,15.1,7.1,2.8,0.6,225,3.2,33.2,25.2,9.2,4.3,1.7,0.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Crousti'Kream Snickers,DESSERTS,84009,,,no,379.7,7.6,53.3,39.3,15.5,6.4,1.8,0.5,226,4.6,31.7,23.4,9.2,3.8,1.1,0.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Ultimate Cookie&Caramel,DESSERTS,82084,,,no,259.6,3,32.6,28.8,11.9,8.4,4.6,0.3,236,2.7,29.6,26.2,10.8,7.6,4.2,0.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Sundae Chocolat Noisette,DESSERTS,80001,,,no,275.7,3.5,34.3,27.7,14.4,4.6,2.3,0.4,226,2.8,28.1,22.7,11.8,3.8,1.9,0.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Sundae Caramel,DESSERTS,80012,,,no,206.2,2.6,36.2,29.4,5.6,3.8,0.6,0.4,169,2.2,29.7,24.1,4.6,3.2,0.5,0.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Sundae Vanille,DESSERTS,80000,,,no,148,2.8,24,19,5,3.6,0,0.22,148,2.8,24,19,5,3.6,0,0.22,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Sundae Chocolat Noisette (Mini),DESSERTS,80006,,,no,137.9,1.7,17.1,13.8,7.2,2.3,1.2,0.2,226,2.8,28.1,22.7,11.8,3.8,1.9,0.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Sundae Caramel (Mini),DESSERTS,80013,,,no,103.1,1.3,18.1,14.7,2.8,1.9,0.3,0.2,169,2.2,29.7,24.1,4.6,3.2,0.5,0.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Cookie Double Choco,DESSERTS,82015,,,no,326.2,3.4,42.6,23,15.5,8.7,3.9,0.6,466,4.9,60.8,32.9,22.1,12.5,5.5,0.9,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Donut au Nutella,DESSERTS,82065,,,no,265.2,4.9,32,14,12.8,5,0,0.7,442,8.1,53.4,23.4,21.3,8.4,0,1.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Muffin Fondant Noisette,DESSERTS,82062,,,no,437.8,5.7,47,25.3,25.3,3.1,1.8,0.8,398,5.2,43,23,23,2.8,1.6,0.7,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,P'tite Pomme à Croquer (origine France),DESSERTS,82002,,,no,42.4,0.2,8.8,8.8,0.1,0,1.6,0,53,0.3,11,11,0.2,0,2,0,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Pom'Potes Bio,DESSERTS,82003,,,no,54.9,0.5,10.8,9.9,0.5,0.2,1.2,,61,0.5,12,11,0.6,0.2,1.3,,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,iTWIST,PETITS PLAISIRS,17040,,,no,275.7,12.3,28.6,2.8,12.9,2.2,2,1.5,244,10.9,25.3,2.5,11.4,1.95,1.8,1.35,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,3 Crousti' Fromage Mozarella,PETITS PLAISIRS,60085,,,no,204.7,9.1,15.3,0.8,11.6,4.8,1.5,0.8,341.1,15.1,25.5,1.4,19.3,8,2.5,1.4,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,10 Crousti' Fromage Mozzarella,PETITS PLAISIRS,60086,,,no,682.2,30.2,51,2.8,38.6,16,5,2.7,341.1,15.1,25.5,1.4,19.3,8,2.5,1.4,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,The Original Onion Rings x5,PETITS PLAISIRS,60041,,,no,194.8,5.6,20.2,3.5,9.7,1.1,2.4,0.7,259.7,7.4,26.9,4.7,12.9,1.4,3.2,0.9,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,The Original Onion Rings x10,PETITS PLAISIRS,60042,,,no,389.6,11.1,40.4,7.1,19.4,2.1,4.8,1.4,259.7,7.4,26.9,4.7,12.9,1.4,3.2,0.9,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,2 Tenders,PETITS PLAISIRS,22000,,,no,292.1,20.2,14,0.5,17,1.9,1.3,1.3,275.6,19.1,13.2,0.5,16,1.8,1.2,1.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,3 Hot Wings,PETITS PLAISIRS,20000,,,no,485.8,22.7,17.4,0.5,36.2,5.1,0.5,1.6,368,17.2,13.2,0.5,27.4,3.9,0.5,1.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Crispy Burger,PETITS PLAISIRS,13210,,,no,384.6,19.2,39.6,7.7,15.9,2.4,2.6,2,251.4,12.6,25.9,5,10.4,1.6,1.7,1.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Crispy Burger Spicy,PETITS PLAISIRS,13230,,,no,381,18.2,42.7,9,14.7,2.4,2.6,2.3,249,11.9,27.9,5.9,9.6,1.6,1.7,1.5,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Crispy Burger Fish,PETITS PLAISIRS,13220,,,no,381.7,17.1,47.7,8.1,13.3,2.1,1.6,1.4,241.6,10.8,30.2,5.1,8.4,1.3,1,0.9,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Crispy Burger Fish Spicy,PETITS PLAISIRS,13240,,,no,372.1,15.8,53.2,9.8,10,1.6,3.2,1.5,235.5,10,33.7,6.2,6.3,1,2,1,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Krunchy,PETITS PLAISIRS,13000,,,no,334.1,16.9,34.3,5.1,13.9,2.4,2,1.6,288,14.6,29.6,4.4,12,2.1,1.7,1.4,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Krunchy Fish,PETITS PLAISIRS,13006,,,no,278.8,11.9,34.7,4.3,10,1.4,0.8,1.3,276,11.8,34.4,4.3,9.9,1.4,0.8,1.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Frites (Moyennes),PETITS PLAISIRS,60001,,,no,226,4,33.7,0.4,9.2,0.9,3.9,0.9,226,4,33.7,0.4,9.2,0.9,3.9,0.9,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Frites (Grandes),PETITS PLAISIRS,60002,,,no,316.4,5.6,47.2,0.6,12.9,1.3,5.5,1.3,226,4,33.7,0.4,9.2,0.9,3.9,0.9,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Kentucky Fries,PETITS PLAISIRS,60004,,,no,509.6,9.5,57.5,1.1,28.4,6.1,4.4,1.5,280,5.2,31.6,0.6,15.6,3.4,2.4,0.8,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Cobette épi de maïs,PETITS PLAISIRS,60010,,,no,130.6,5,16.9,5,3.7,0.6,,0.05,92,3.5,11.9,3.5,2.6,0.4,,0.05,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Petite salade,PETITS PLAISIRS,60020,,,no,12.2,0.9,0.9,0.4,0.3,0.1,1.2,0.05,29,2.2,2.1,0.9,0.7,0.1,2.9,0.05,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Tomates cerises,PETITS PLAISIRS,60030,,,no,8,0.3,1.6,1,0.2,0,,0,25,0.8,5,3,0.7,0,,0,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Saucy Boxmaster,A LA CARTE,16370,,,no,721.4,28.4,73.1,14.5,33.4,7.2,7.6,4.4,229,9,23.2,4.6,10.6,2.3,2.4,1.4,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Tower Cheese & Bacon,A LA CARTE,11120,,,no,706.3,29.5,78.5,12.4,29.3,5.4,5.4,4.6,272.7,11.4,30.3,4.8,11.3,2.1,2.1,1.8,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Tower Spicy,A LA CARTE,11140,,,no,677.5,31.3,72.5,11.8,27.5,7.3,7.5,4.2,271,12.5,29,4.7,11,2.9,3,1.7,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Tower Cheese & Bacon Veggie,A LA CARTE,11180,,,no,683.6,30,72.9,12.6,27.8,4.9,10.6,4.2,250.4,11,26.7,4.6,10.2,1.8,3.9,1.6,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Kentucky BBQ & Bacon,A LA CARTE,12280,,,no,806.4,42.6,69.3,15.8,38.2,12.8,7.4,5.2,295.4,15.6,25.4,5.8,14,4.7,2.7,1.9,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Kentucky Veggie Burger,A LA CARTE,12470,,,no,698.4,34.6,71,17.3,28.6,9,9.3,4.7,270.7,13.4,27.5,6.7,11.1,3.5,3.6,1.8,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Double Kentucky Burger,A LA CARTE,12290,,,no,1011.5,65,89.5,21.3,42.6,11.7,5.1,7.6,275.6,17.7,24.4,5.8,11.6,3.2,1.4,2.1,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Colonel Original,A LA CARTE,12040,,,no,607.2,29.5,56.4,8.4,30,6.3,3.8,4.3,253,12.3,23.5,3.5,12.5,2.6,1.6,1.8,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Colonel Original Bacon,A LA CARTE,12042,,,no,698.3,33.6,77.1,9.6,27.4,5.9,4.4,4.1,282.7,13.6,31.2,3.9,11.1,2.4,1.8,1.7,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Colonel Bacon Veggie,A LA CARTE,12380,,,no,672.1,29.5,61.7,10.7,32,4.8,9.7,3.9,264.6,11.6,24.3,4.2,12.6,1.9,3.8,1.5,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Colonel Original Fish,A LA CARTE,12067,,,no,514.6,19.7,56.3,8.8,23.9,5.3,2.6,2.9,256,9.8,28,4.4,11.9,2.7,1.3,1.5,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Colonel Original Veggie,A LA CARTE,12041,,,no,584.4,24,62.1,9.2,28.6,6.2,9.2,3.5,253,10.4,26.9,4,12.4,2.7,4,1.5,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,5 Tenders,A LA CARTE,22020,,,no,730.3,50.6,35,0.5,42.4,4.8,3.2,3.4,275.6,19.1,13.2,0.5,16,1.8,1.2,1.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Bucket 10 Tenders,A LA CARTE,42005,,,no,730.3,50.6,35,0.5,42.4,4.8,3.2,3.4,275.6,19.1,13.2,0.5,16,1.8,1.2,1.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Bucket 20 Tenders,A LA CARTE,42010,,,no,730.3,50.6,35,0.5,42.4,4.8,3.2,3.4,275.6,19.1,13.2,0.5,16,1.8,1.2,1.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,8 Hot Wings,A LA CARTE,20060,,,no,1295.4,60.5,46.5,0.5,96.4,13.7,1.8,4.2,368,17.2,13.2,0.5,27.4,3.9,0.5,1.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Bucket 16 Hot Wings,A LA CARTE,40004,,,no,1295.4,60.5,46.5,0.5,96.4,13.7,0.5,4.2,368,17.2,13.2,0.5,27.4,3.9,0.5,1.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Bucket 32 Hot Wings,A LA CARTE,40030,,,no,1295.4,60.5,46.5,0.5,96.4,13.7,,4.2,368,17.2,13.2,0.5,27.4,3.9,0.5,1.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Bucket 50 Hot Wings,A LA CARTE,40020,,,no,1295.4,60.5,46.5,0.5,96.4,13.7,0.5,4.2,368,17.2,13.2,0.5,27.4,3.9,0.5,1.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Boxmaster Original,A LA CARTE,10000,,,no,685.6,30.1,59.2,4,35.7,5,2.9,4.7,234,10.3,20.2,1.4,12.2,1.7,1,1.6,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Boxmaster Spicy,A LA CARTE,10010,,,no,710.8,30.8,69.7,8.8,32.8,10.8,6.7,4,242.6,10.5,23.8,3,11.2,3.7,2.3,1.4,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Boxmaster Veggie,A LA CARTE,10140,,,no,636.2,22.2,70.8,3.7,30.9,4.9,7.4,3.4,241,8.4,26.8,1.4,11.7,1.9,2.8,1.3,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Salade Boost Italienne Tenders,A LA CARTE,92160,,,no,349.1,22.9,15.1,2,21.4,8.8,2.4,1.3,178.1,11.7,7.7,1,10.9,4.5,1.2,0.7,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Salade Boost Italienne Cheese,A LA CARTE,92170,,,no,309.4,12.8,26,2.7,16.4,8.7,1.8,0.9,173.8,7.2,14.6,1.5,9.4,4.9,1,0.5,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Salade Caesar Parmigiano Tenders,A LA CARTE,92070,,,no,416.1,18.7,32.5,0.5,22.7,10.7,,2.3,187,8.4,14.6,2.1,10.2,4.8,1.7,1,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Salade Caesar Parmigiano Crousti,A LA CARTE,92090,,,no,366.8,,15.2,0.5,21.3,6.6,,1.6,150,,6.2,0.9,8.7,2.7,,0.7,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion;energy_unchecked
+KFC,FR,fr,Sauce Sweet & Sour,SAUCES,62004,,,no,35,1,8,0.1,0,1,1,0,154,1,36,,1,1,1,1,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion;saturated_over_fat_portion
+KFC,FR,fr,Sauce Original Recipe,SAUCES,62005,,,no,90.4,0.3,2.1,,2.1,0.7,,0.4,393,1.5,9.1,,9.1,3,,1.7,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion;energy_mismatch_portion(90.4/28);energy_mismatch_100(393/124)
+KFC,FR,fr,Sauce Smoky BBQ,SAUCES,62003,,,no,40.8,1,10,,1,,,0.6,163,1,40,,1,,,2.5,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion;energy_mismatch_portion(40.8/53)
+KFC,FR,fr,Sauce Creamy Curry,SAUCES,62001,,,no,92.2,1,4.4,,8.3,,,0.4,401,1,19,,36,,1,2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
+KFC,FR,fr,Sauce 2HOT4U,SAUCES,62000,,,no,33.1,0.2,7.8,4.8,0.5,0.1,0.2,0.7,144,0.8,34,21,0.5,0.1,0.7,3.2,both,https://api.kfc.fr/menu/allergen-nutrition,2026-10-11,no_portion
