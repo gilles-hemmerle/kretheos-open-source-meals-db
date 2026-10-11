@@ -48,13 +48,15 @@ def test_readme_names_every_table(tmp_path: Path) -> None:
             assert f"`{name}`" in README, name
 
 
-def test_committed_kratheos_layer_is_empty_and_has_the_documented_layout() -> None:
-    """The committed layer has the layout of the code and holds no row."""
+def test_committed_kratheos_layer_has_the_documented_layout() -> None:
+    """The committed layer has the layout of the code and no column naming a person.
+
+    It is empty in a new repository, and holds what people added once the
+    weekly export of a hosted service has committed it: both are read here.
+    """
     layer = kratheos.read_layer(REPOSITORY / kratheos.FILE_NAME)
-    assert layer.meta == {"schema_version": str(kratheos.SCHEMA_VERSION), "exported_at": ""}
-    assert layer.rows == 0
-    assert not (layer.products or layer.versions or layer.votes or layer.translations)
-    assert not layer.portions
+    assert layer.meta["schema_version"] == str(kratheos.SCHEMA_VERSION)
+    assert set(layer.meta) == {"schema_version", "exported_at"}
     forbidden = ("user", "account", "handle", "email", "author", "device", "person", "contributor")
     for table, columns in kratheos.TABLES.items():
         for name, _ in columns:

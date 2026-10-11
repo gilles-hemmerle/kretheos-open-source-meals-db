@@ -336,6 +336,38 @@ def test_whole_loop_export_rebuild_swap(service: Running) -> None:
     lost.close()
 
 
+def test_a_build_directory_keeps_the_repository_free_of_what_a_build_writes(
+    service: Running, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a build directory, a rebuild leaves nothing git ignores in the repository.
+
+    This is how a server that runs the code from a clone rebuilds: downloads,
+    working files and the other outputs go with its data.
+    """
+    root = service.workspace.sources_file.parent
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    # The stored copies of the large sources are looked for where they are downloaded to.
+    shutil.move(root / "mirror", build_dir / "mirror")
+    shutil.rmtree(root / "dist")
+    monkeypatch.setenv(cli.BUILD_DIR_VARIABLE, str(build_dir))
+    database, live = str(service.settings.database), str(service.settings.live)
+    arguments = ["--root", str(root), "rebuild", "--from-mirror", "--min-free-gb", "0.1"]
+    assert cli.main([*arguments, "--database", database, "--live", live]) == 0
+    assert not [name for name in ("mirror", "work", "dist") if (root / name).exists()]
+    assert (build_dir / "dist" / "products.parquet").exists()
+    assert (build_dir / "mirror" / mirror.INDEX_NAME).exists()
+    assert json.loads((service.settings.database.with_name("rebuild.json")).read_text())["swapped"]
+
+    # The option wins over the variable; the files laid out for a release follow it.
+    other = tmp_path / "other"
+    publish = ["--root", str(root), "--build-dir", str(other), "database-files"]
+    assert cli.main([*publish, "--database", database]) == 0
+    assert (other / "release-database" / maintenance.INDEX_NAME).exists()
+    assert not (root / "release-database").exists()
+    assert not (build_dir / "release-database").exists()
+
+
 def test_rebuild_that_loses_too_much_is_refused(service: Running) -> None:
     """A suspicious rebuild never replaces the database being served."""
     database = service.settings.database

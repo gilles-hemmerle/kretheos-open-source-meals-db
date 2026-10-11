@@ -1,0 +1,108 @@
+# The food service, hosted from a clone of this repository (README, Hosting).
+#
+#   git clone <this repository> /srv/kratheos-food-data && cd /srv/kratheos-food-data
+#   mkdir /srv/kratheos-food-prod                 # the data, outside the clone
+#   printf 'FOOD_DATA_DIR=/srv/kratheos-food-prod\nFOOD_DATA_UID=%s\nFOOD_DATA_GID=%s\n' \
+#       "$(id -u)" "$(id -g)" > .env
+#   docker compose up -d
+#
+# The container runs the code of this clone, mounted read-only: an update is
+# `git pull` then `docker compose restart`. The image holds Python and the
+# dependencies only (`docker compose build` when requirements.txt changes).
+#
+# Everything the service writes is in FOOD_DATA_DIR, a directory of the host
+# outside the clone: the database being served, the live database of what
+# people entered, the key secret and the token. It is a bind mount, never a
+# volume of Docker: the data survive the container and the image, and are
+# backed up like any directory. Without FOOD_DATA_DIR, or when the directory
+# does not exist, nothing starts.
+#
+# Settings, in the environment or in .env next to this file (never committed):
+#
+#   FOOD_DATA_DIR    the data directory of the host (required, must exist)
+#   FOOD_DATA_UID    user the container runs as, owner of the data directory
+#   FOOD_DATA_GID    and its group (default 1000:1000)
+#   FOOD_DATA_HOST   address of the host the service is published on (default
+#                    127.0.0.1: reads need no authentication, never a public one)
+#   FOOD_DATA_PORT   port of the host (default 8750)
+#   FOOD_DATA_USER_VERSION_VOTES, FOOD_DATA_SEARCH_BUDGET_MS, FOOD_DATA_SEARCHES
+#                    as in the README (Settings)
+#
+# `maintenance` is the same image with the clone writable, for the commands
+# run by hand or by cron; `docker compose up` never starts it:
+#
+#   docker compose run --rm maintenance install-database --url <address>
+#   docker compose run --rm maintenance export-layer     # ops/export-and-push.sh
+#   docker compose run --rm maintenance rebuild
+
+x-service: &service
+  build: .
+  image: kratheos-food-data
+  # The owner of the data directory on the host, so that its files are theirs.
+  user: "${FOOD_DATA_UID:-1000}:${FOOD_DATA_GID:-1000}"
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
+x-environment: &environment
+  # Inside the container: the mount below, and every interface (which address
+  # of the host reaches the service is decided by `ports`).
+  FOOD_DATA_DIR: /data
+  FOOD_DATA_HOST: 0.0.0.0
+  FOOD_DATA_PORT: "8750"
+  FOOD_DATA_USER_VERSION_VOTES: "${FOOD_DATA_USER_VERSION_VOTES:-3}"
+  FOOD_DATA_SEARCH_BUDGET_MS: "${FOOD_DATA_SEARCH_BUDGET_MS:-500}"
+  FOOD_DATA_SEARCHES: "${FOOD_DATA_SEARCHES:-3}"
+
+x-data: &data
+  type: bind
+  source: "${FOOD_DATA_DIR:?set FOOD_DATA_DIR to the directory of the host that holds the data, outside the clone (in .env)}"
+  target: /data
+  bind:
+    # A directory that does not exist is an error, not a directory to create.
+    create_host_path: false
+
+services:
+  food:
+    <<: *service
+    restart: unless-stopped
+    environment: *environment
+    ports:
+      - "${FOOD_DATA_HOST:-127.0.0.1}:${FOOD_DATA_PORT:-8750}:8750"
+    volumes:
+      - type: bind
+        source: .
+        target: /repo
+        read_only: true
+      - *data
+    healthcheck:
+      # 200 once a database is installed; 503 (unhealthy) until then.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u; u.urlopen('http://127.0.0.1:8750/v1/health', timeout=4)"
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  maintenance:
+    <<: *service
+    profiles:
+      - maintenance
+    environment:
+      <<: *environment
+      # What a rebuild downloads and writes goes with the data, not in the clone.
+      FOOD_DATA_BUILD_DIR: /data/build
+    volumes:
+      # Writable: an export writes kratheos.sqlite in the clone, a rebuild
+      # refreshes the stored originals of sources/.
+      - type: bind
+        source: .
+        target: /repo
+      - *data

@@ -697,6 +697,7 @@ repository by default, never committed):
 | `live.sqlite` (and `-wal`, `-shm` while running) | Everything entered through the service: products, versions, names, portions; and what is private: the votes by hashed contributor key, the reports, what moderation hid, the history of writes (which hashed key wrote what), the keys moderation blocked and what is hidden with them. Mode 600. | Never as it is. Only through the export below. |
 | `contributor.key` | The secret the contributor keys are hashed with (HMAC-SHA-256), when `FOOD_DATA_KEY_SECRET` does not give it. Mode 600. | Never. |
 | `rebuild.json` | The report of the last rebuild. | No. |
+| `service.token` | The token of writes and moderation of a [hosted service](#hosting), created at its first start. Mode 600. | Only to the application that calls the service. |
 
 `live.sqlite` is the only copy of what was entered since the last export:
 back it up (`sqlite3 live.sqlite ".backup copy.sqlite"`, safe while the
@@ -749,6 +750,11 @@ layout when the service opens it; nothing stored is changed.
 | `FOOD_DATA_USER_VERSION_VOTES` | `--user-version-votes` | 3 | Votes a user's version needs to be served instead of a source; also read by the build |
 | `FOOD_DATA_SEARCH_BUDGET_MS` | | 500 | Time a search may spend in the index |
 | `FOOD_DATA_SEARCHES` | | 3 | Searches ranked at the same time; the others wait their turn |
+| `FOOD_DATA_BUILD_DIR` | `--build-dir` | the repository | Where a build keeps what git ignores: `mirror/`, `work/`, `dist/` and the files laid out for a release |
+
+In the `.env` of a [hosted service](#hosting) the same names are those of the
+host: `FOOD_DATA_DIR` is the directory mounted as the data directory,
+`FOOD_DATA_HOST` and `FOOD_DATA_PORT` the address the service is published on.
 
 ### The weekly export
 
@@ -770,7 +776,9 @@ empty one, or by one with a fifth fewer products, versions, names or
 portions (`--force` to do it anyway): that is what a live database that lost its data,
 or never took the layer over, would do.
 
-`--push` does nothing in a repository without a remote. With one, a push
+On a server, cron runs [`ops/export-and-push.sh`](#hosting), which does the
+same with the container and the git of the host. `--push` does nothing in a
+repository without a remote. With one, a push
 that fails (the remote away, credentials refused) ends the command with an
 error (status 1) and leaves the commit in place; the next run pushes what is
 waiting, even when it has nothing new to commit. The commit is made under
@@ -816,42 +824,140 @@ and swaps the file in the same way.
 
 ### Hosting
 
-**Debian.** `debian/` builds the package `kratheos-food-data` for Debian
-trixie (`dpkg-buildpackage -us -uc -b`, or the builder described by
-`builder.yml`): code and its Python environment in
-`/usr/share/kratheos-food-data`, settings in
-`/etc/kratheos-food-data/service.conf` (token and key secret generated at the
-first installation), data in `/var/lib/kratheos-food-data`, an unprivileged
-user, a sandboxed service and two timers: the export every Monday, the
-rebuild on the first Sunday of the month. The package ships no data:
+The service is hosted from a clone of this repository, in a container that
+runs the code of that clone. Three things are kept apart:
+
+| Where | What |
+| --- | --- |
+| The clone, e.g. `/srv/kratheos-food-data` | The code the container runs, mounted read-only; `compose.yml` and `ops/`; `kratheos.sqlite`, which the weekly export commits; `.env`, the settings of this host, never committed. |
+| The data directory, e.g. `/srv/kratheos-food-prod` | Everything of production, and nothing else: `food.sqlite` with `manifest.json` and `identifiers.txt.gz` (and the `kratheos.sqlite` an installed database came with), `live.sqlite`, `contributor.key`, `service.token`; `build/` while a database is rebuilt by hand. |
+| The image | Python and the dependencies of `requirements.txt`. No code, no data. |
 
 ```sh
-sudo -u kratheos-food-data git clone <this repository> /var/lib/kratheos-food-data/repository
-sudo food-data import-layer                            # takes over the layer of the clone
-sudo systemctl start kratheos-food-data-rebuild        # builds from the sources (9 GB), or:
-sudo food-data install-database --url https://example.org/food/v1
+git clone git@github.com:<owner>/<repository>.git /srv/kratheos-food-data
+cd /srv/kratheos-food-data
+mkdir /srv/kratheos-food-prod            # the data directory, outside the clone
+printf 'FOOD_DATA_DIR=/srv/kratheos-food-prod\nFOOD_DATA_UID=%s\nFOOD_DATA_GID=%s\n' \
+    "$(id -u)" "$(id -g)" > .env
+docker compose up -d                     # builds the image the first time
+docker compose run --rm maintenance install-database \
+    --url https://github.com/<owner>/<repository>/releases/download/<tag>
+curl http://127.0.0.1:8750/v1/health
 ```
 
-`/usr/bin/food-data` is the command of the package: it reads the settings of
-`service.conf`, works as the service user even when root types it, and takes
-the clone as its repository.
+- **`FOOD_DATA_DIR` is the one setting that has no default**: the directory
+  of the host that holds the data, outside the clone. It is mounted as it is
+  (a bind mount, never a volume of Docker): the data survive the container
+  and the image, and are backed up like any directory. When it is not set, or
+  when the directory does not exist, `docker compose` stops with a message
+  and starts nothing; a container started some other way without that mount
+  refuses to start too (`ops/entrypoint.sh`). The service never writes its
+  data inside the container, nor in the clone.
+- The container runs as `FOOD_DATA_UID:FOOD_DATA_GID` (1000:1000 when not
+  set), the owner of the data directory: its files belong to that user of the
+  host. No capability, a read-only file system, `/tmp` in memory.
+- It is published on `127.0.0.1:8750` of the host. `FOOD_DATA_HOST` and
+  `FOOD_DATA_PORT` in `.env` publish it elsewhere: a private address behind
+  the firewall, never a public one (reads need no authentication).
+- **Secrets.** At the first start the container creates `service.token` (the
+  shared secret of writes and moderation) and `contributor.key` (the secret
+  the contributor keys are hashed with) in the data directory, readable by
+  their owner only; neither is ever printed nor logged. The administrator of
+  the Kratheos backend reads the token there (`cat
+  /srv/kratheos-food-prod/service.token`) and gives it to the backend as
+  `FOOD_SERVICE_TOKEN`, with `FOOD_SERVICE_URL=http://127.0.0.1:8750`. To
+  change it, replace the content of the file (16 characters at least) and
+  restart. `contributor.key` is never changed: everybody would count as a new
+  person.
+- Until a database is installed the service answers 503
+  `database_unavailable` and the container is reported unhealthy;
+  `install-database` (above) or a rebuild (below) puts one in place without a
+  restart.
+- **Updating** is `git pull --rebase` then `docker compose restart`: the
+  container runs the new code, no image is built. Only a change of
+  `requirements.txt` needs `docker compose build` then `docker compose up
+  -d`; a container whose image was built from other dependencies than those
+  of the clone refuses to start and says so.
+- **Back up** `live.sqlite` (`sqlite3 live.sqlite ".backup copy.sqlite"`,
+  safe while the service runs), `contributor.key` and `service.token`.
+  `food.sqlite` is installed or rebuilt again.
 
-The timers only run once `/var/lib/kratheos-food-data/repository` exists: it
-is the clone that holds `sources.toml`, the stored originals and
-`kratheos.sqlite`, where the export is committed and the rebuild works.
+`maintenance` is the same image with the clone writable, for the commands
+below; `docker compose up` never starts it.
 
-**Docker.** One directory of the host holds all the data:
+**The weekly export, by cron.** `ops/export-and-push.sh` sends what people
+added back to the repository: it brings the clone up to date with its remote,
+writes `kratheos.sqlite` into the clone from the live database, commits that
+file alone when it changed and pushes, with the git and the deploy key of the
+host. Whatever else is modified in the clone is never committed; a week
+without a change gives no commit; it can be run twice. It prints nothing when
+all went well. A push that fails (the forge away, the key refused) leaves the
+commit in the clone, says so and ends with status 1, so that cron mails it;
+the next run pushes what is waiting.
+
+```
+MAILTO=someone@example.org
+PATH=/usr/local/bin:/usr/bin:/bin
+30 3 * * 1  /srv/kratheos-food-data/ops/export-and-push.sh
+```
+
+It runs as the user who owns the clone. Once, for that user: a deploy key of
+the repository with write access (`ssh-keygen -t ed25519`, the public key
+added on the forge), the clone made over SSH as above (its first connection
+is where the host key of the forge is accepted), and `git config user.name`
+and `user.email` in the clone; without them the commits are made as `kratheos-food-data
+<kratheos-food-data@localhost>`. The commits go to the branch the clone is on.
+Updating the clone does not restart the service: code the script brings is
+run from the next `docker compose restart`.
+
+**Rebuilding the database by hand.** Nothing rebuilds the database on a
+schedule. The day a new one is wanted (new sources in the repository, fresher
+data from the publishers):
 
 ```sh
-docker build -t kratheos-food-data .
-docker compose -f compose.example.yml up -d
-docker compose -f compose.example.yml run --rm food \
-    install-database --url https://example.org/food/v1
+cd /srv/kratheos-food-data
+git pull --rebase && docker compose restart      # the sources and the code of the day
+docker compose run --rm maintenance rebuild --min-free-gb 10
 ```
 
-`compose.example.yml` mounts `./data` of the host on `/data`: the databases
-live on the host, never in a volume of Docker. The port is published on
-`127.0.0.1` only.
+It does what [`food-data rebuild`](#the-periodic-rebuild) does: exports the
+live database to `kratheos.sqlite`, downloads the sources, builds into a new
+file, compares it with the database being served and swaps it in; the
+running service opens the new file by itself, nothing is restarted. A result
+that loses too much is refused (status 2) and the database being served
+stays.
+
+- Downloads, working files and the other outputs go to `build/` in the data
+  directory (`build/mirror`, about 9 GB; `build/work`; `build/dist`), never
+  into the clone. Count 20 GB free on the disk of the data directory.
+  `build/mirror` kept, the next rebuild only downloads what the publishers
+  changed; `rm -rf /srv/kratheos-food-prod/build` gives everything back.
+  Another disk: `docker compose run --rm -v /mnt/big:/build -e
+  FOOD_DATA_BUILD_DIR=/build maintenance rebuild`.
+- The clone only receives what the repository holds: `kratheos.sqlite`
+  (committed by the next weekly export) and, when a publisher changed one,
+  the stored originals of `sources/`. Commit those (`git add sources && git
+  commit`) or discard them (`git checkout -- sources`): the weekly export
+  cannot bring a clone up to date over files modified by hand that the remote
+  changed too.
+- A database someone already built and published is installed instead in a
+  few minutes, without the 9 GB: `docker compose run --rm maintenance
+  install-database --url ...`.
+
+Publishing the result, a separate and optional step: `database-files` lays
+out what a release must carry, and `gh` makes the release, under a date tag.
+
+```sh
+docker compose run --rm maintenance database-files     # build/release-database
+gh release create "$(date -u +%Y.%m.%d)" /srv/kratheos-food-prod/build/release-database/* \
+    --title "Food database of $(date -u '+%-d %B %Y')" --notes "..."
+```
+
+Others then install it with `food-data install-database --url
+https://github.com/<owner>/<repository>/releases/download/<tag>`.
+
+An alternative exists for a host without Docker: `debian/` and `builder.yml`
+build a Debian package (a system user, a systemd service and its timers).
 
 ## Development
 
@@ -865,8 +971,9 @@ sources.toml             the sources, their files and their licences
 kratheos.sqlite          the Kratheos layer
 sources/                 stored originals of the small sources
 docs/api.md              the API of the service
-debian/, builder.yml     the Debian package
-Dockerfile, compose.example.yml
+Dockerfile, compose.yml  the container the service is hosted in
+ops/                     its entry point, and the weekly export run by cron
+debian/, builder.yml     a Debian package, as an alternative
 src/kratheos_food_data/
     cli.py               command line
     build.py             the pipeline

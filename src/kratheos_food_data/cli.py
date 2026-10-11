@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -54,6 +55,8 @@ from .service.live import LiveStore
 from .service.settings import DEFAULT_HOST, DEFAULT_PORT, Settings, SettingsError, load_settings
 
 EXIT_REFUSED = 2
+# Where a build keeps what git ignores, when not in the repository.
+BUILD_DIR_VARIABLE = "FOOD_DATA_BUILD_DIR"
 
 LISTED_IDENTIFIERS = 50
 
@@ -158,6 +161,13 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path.cwd(),
         help="directory of the repository (default: current directory)",
+    )
+    parser.add_argument(
+        "--build-dir",
+        type=Path,
+        help="directory for what a build downloads and writes (mirror/, work/, dist/ and the"
+        f" files laid out for a release) instead of the repository (default: {BUILD_DIR_VARIABLE},"
+        " else the repository)",
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -316,6 +326,23 @@ def _options(args: argparse.Namespace) -> BuildOptions:
     )
 
 
+def _build_dir(args: argparse.Namespace) -> Path | None:
+    """Return where a build keeps what git ignores, when not in the repository.
+
+    Args:
+        args: The parsed arguments.
+
+    Returns:
+        The directory given by `--build-dir`, else by the environment
+        variable, else None: `mirror/`, `work/` and `dist/` are then those of
+        the repository.
+    """
+    if args.build_dir is not None:
+        return args.build_dir.expanduser().resolve()
+    configured = os.environ.get(BUILD_DIR_VARIABLE, "").strip()
+    return Path(configured).expanduser().resolve() if configured else None
+
+
 def _settings(args: argparse.Namespace, root: Path, with_secret: bool = True) -> Settings:
     """Read the settings of the service for a command.
 
@@ -395,7 +422,7 @@ def _run_service_command(args: argparse.Namespace, workspace: Workspace, root: P
             return EXIT_REFUSED
     elif args.command == "database-files":
         settings = _settings(args, root, with_secret=False)
-        out_dir = (args.out or root / "release-database").resolve()
+        out_dir = (args.out or workspace.dist.parent / "release-database").resolve()
         layer = workspace.kratheos if workspace.kratheos.exists() else None
         for entry in maintenance.database_files(settings.database, layer, out_dir, log=_log):
             print(f"{entry['size']:>14,}  {entry['sha256']}  {entry['asset']}")
@@ -465,7 +492,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = _parser().parse_args(argv)
     root = args.root.resolve()
-    workspace = Workspace.at(root)
+    workspace = Workspace.at(root, _build_dir(args))
     try:
         if args.command == "build":
             where = dataclasses.replace(
@@ -479,7 +506,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "sources":
             _print_sources(root)
         elif args.command == "release-files":
-            out_dir = (args.out or root / "release").resolve()
+            out_dir = (args.out or workspace.mirror.parent / "release").resolve()
             attached = mirror.prepare_release(workspace.mirror, out_dir, log=_log)
             for entry in attached:
                 print(f"{entry['size']:>14,}  {entry['sha256']}  {entry['asset']}")

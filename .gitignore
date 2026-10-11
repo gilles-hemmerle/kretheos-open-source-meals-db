@@ -29,3 +29,6 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# The settings of compose.yml on this host (the data directory, the user).
+.env

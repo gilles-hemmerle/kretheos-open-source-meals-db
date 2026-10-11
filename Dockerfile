@@ -1,48 +1,37 @@
-# Image of the food service, for anyone who hosts it without the Debian package.
+# Image of the food service: Python and the dependencies, nothing else.
 #
-# It holds the code and its Python environment (the exact versions of
-# requirements.txt, verified by checksum) and no data. Every file the service
-# reads or writes lives in /data, which must be a directory of the host:
+# The code is not in the image. The container runs it from a clone of this
+# repository, mounted read-only on /repo (compose.yml): updating the service
+# is `git pull` then `docker compose restart`. The image is only built again
+# when requirements.txt changes (`docker compose build`); the entry point
+# (ops/entrypoint.sh) refuses to start on a clone whose requirements.txt is
+# not the one the image was built from.
 #
-#   docker build -t kratheos-food-data .
-#   docker run --rm -p 127.0.0.1:8750:8750 -v "$PWD/data:/data" \
-#       -e FOOD_DATA_TOKEN=a-long-shared-secret kratheos-food-data
-#
-# No VOLUME is declared on purpose: an undeclared mount would otherwise put the
-# databases in an anonymous volume that the next `docker rm` loses. See
-# compose.example.yml and the README (Hosting).
+# No data either, and no VOLUME on purpose: every file the service writes
+# lives in /data, a directory of the host mounted by compose.yml. A declared
+# volume would put the databases in an anonymous volume when the mount is
+# forgotten, and the next `docker rm` would lose them; the entry point stops
+# instead when /data is not a mount. See the README (Hosting).
 
 FROM python:3.13-slim
 
-# git: the weekly export commits kratheos.sqlite in a clone kept in /data.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# The exact versions of requirements.txt, verified by checksum. A copy stays
+# in the image, to compare with the one of the clone at each start.
+COPY requirements.txt /opt/kratheos-food-data/requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r /opt/kratheos-food-data/requirements.txt
 
-WORKDIR /app
-COPY requirements.txt pyproject.toml README.md LICENSE LICENSE-DATA ATTRIBUTION ./
-COPY src ./src
-RUN pip install --no-cache-dir --require-hashes -r requirements.txt \
-    && pip install --no-cache-dir --no-deps . \
-    && rm -rf build
-
-# An unprivileged user; compose.example.yml runs as the owner of ./data instead.
-RUN useradd --system --uid 10001 --home-dir /data --no-create-home food
-USER food
-WORKDIR /data
-
-# Inside the container the service listens on every interface: which address
-# of the host reaches it is decided by how the port is published.
-ENV FOOD_DATA_DIR=/data \
-    FOOD_DATA_HOST=0.0.0.0 \
-    FOOD_DATA_PORT=8750 \
-    HOME=/data \
-    PYTHONUNBUFFERED=1
+# The source is imported from the clone, which is read-only: no bytecode is
+# written next to it. HOME is a tmpfs of the container (compose.yml): the user
+# the container runs as is the one of the host, unknown to the image.
+ENV PYTHONPATH=/repo/src \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp
+WORKDIR /repo
 EXPOSE 8750
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8750/v1/health', timeout=4)"]
+# Never root, even when run without compose.yml (which gives the user of the host).
+USER 65534:65534
 
-# --root names the clone of the repository, when one is kept in /data.
-ENTRYPOINT ["food-data", "--root", "/data/repository"]
+ENTRYPOINT ["sh", "/repo/ops/entrypoint.sh"]
 CMD ["serve"]

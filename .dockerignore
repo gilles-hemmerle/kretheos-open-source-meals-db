@@ -1,17 +1,6 @@
-# What the image is not built from: the data (never in an image), the stored
-# originals, the development environment and the history.
-.git
-.venv
-.pytest_cache
-.ruff_cache
-__pycache__
-*.py[cod]
-mirror
-release
-release-database
-work
-dist
-data
-sources
-tests
-debian
+# The image holds Python and the dependencies only (see the Dockerfile): the
+# one file it is built from is requirements.txt. The code is mounted from the
+# clone, the data live in a directory of the host; neither is ever sent to the
+# builder.
+*
+!requirements.txt

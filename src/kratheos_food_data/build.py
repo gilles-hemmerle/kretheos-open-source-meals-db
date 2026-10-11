@@ -69,21 +69,28 @@ class Workspace:
     kratheos: Path
 
     @classmethod
-    def at(cls, root: Path) -> Workspace:
+    def at(cls, root: Path, build_dir: Path | None = None) -> Workspace:
         """Build the default workspace of a repository checkout.
 
         Args:
             root: Directory holding `sources.toml`.
+            build_dir: Directory receiving what a build downloads and writes
+                and git ignores (`mirror/`, `work/`, `dist/`), when they must
+                not be in the checkout: a server that runs the code from a
+                clone keeps them with its data. What the repository holds
+                (`sources.toml`, `sources/`, `kratheos.sqlite`) stays in it.
 
         Returns:
-            The workspace with every directory under root.
+            The workspace with every directory under root, or the three
+            git-ignored ones under the build directory.
         """
+        scratch = root if build_dir is None else build_dir
         return cls(
             sources_file=root / "sources.toml",
             sources_dir=root / "sources",
-            mirror=root / "mirror",
-            work=root / "work",
-            dist=root / "dist",
+            mirror=scratch / "mirror",
+            work=scratch / "work",
+            dist=scratch / "dist",
             kratheos=root / kratheos.FILE_NAME,
         )
 
