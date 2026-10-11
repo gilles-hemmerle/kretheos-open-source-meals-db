@@ -112,6 +112,12 @@ def test_api_reference_holds_the_contract_and_follows_the_code() -> None:
         "GET /v1/moderation/reports?state=open",
         "POST /v1/moderation/foods/{id}/hide",
         "POST /v1/moderation/reports/{report_id}/close",
+        "GET /v1/moderation/foods?state=open",
+        "POST /v1/moderation/foods/{id}/reports/close",
+        "GET /v1/moderation/foods/{id}/contributors",
+        "POST /v1/moderation/contributors/lookup",
+        "POST /v1/moderation/contributors/block",
+        "POST /v1/moderation/contributors/unblock",
     ):
         assert endpoint in API, endpoint
     for code, status in api.ERROR_CODES.items():

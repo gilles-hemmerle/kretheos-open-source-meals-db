@@ -881,7 +881,13 @@ def test_reports_and_moderation(service: Running) -> None:
     report = {"reason": "inappropriate", "note": "Ce n'est pas un aliment.", "contributor": BOB}
     assert service.post(f"/v1/foods/{food_id}/reports", report) == (
         202,
-        {"id": 1, "state": "open"},
+        {
+            "id": 1,
+            "state": "open",
+            "replaced": False,
+            "reporters": 1,
+            "reasons": {"inappropriate": 1},
+        },
     )
     second = {"reason": "wrong_values", "contributor": CAROL}
     assert service.post(f"/v1/foods/{NUTELLA}/reports", second)[1]["id"] == 2

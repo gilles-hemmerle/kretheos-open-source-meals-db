@@ -617,7 +617,7 @@ repository by default, never committed):
 | --- | --- | --- |
 | `food.sqlite` | The main database being served, read-only. Replaced in one step by a rebuild or an installation. | It is the public database. |
 | `manifest.json`, `identifiers.txt.gz` | The manifest and the identifier list of that build; the build date served comes from the manifest. | Public. |
-| `live.sqlite` (and `-wal`, `-shm` while running) | Everything entered through the service: products, versions, names; and what is private: the votes by hashed contributor key, the reports, what moderation hid, the history of writes. Mode 600. | Never as it is. Only through the export below. |
+| `live.sqlite` (and `-wal`, `-shm` while running) | Everything entered through the service: products, versions, names; and what is private: the votes by hashed contributor key, the reports, what moderation hid, the history of writes (which hashed key wrote what), the keys moderation blocked and what is hidden with them. Mode 600. | Never as it is. Only through the export below. |
 | `contributor.key` | The secret the contributor keys are hashed with (HMAC-SHA-256), when `FOOD_DATA_KEY_SECRET` does not give it. Mode 600. | Never. |
 | `rebuild.json` | The report of the last rebuild. | No. |
 
@@ -634,6 +634,19 @@ every read puts the main database and the live database together. Once a
 rebuild has folded the live data into `food.sqlite`, both hold the same
 versions and the same names, each kept once, and the votes of a food are
 those of the live database alone: nothing is counted twice.
+
+**Moderation** needs the token too. A food is reported once per person, and
+the list of the reported foods tells how many different people reported each
+and why, the most reported first; reports hide nothing by themselves, a
+moderator hides or restores a food or one version. The products, the
+versions and the names that are published carry no author: the history kept
+in `live.sqlite` is the only link to the hashed key that wrote them. With
+it a moderator sees what one key wrote, hides all of it and refuses its
+later writes in one call (its votes stop counting), and undoes both, which
+gives back exactly what was served before.
+[`docs/api.md`](docs/api.md#moderation-one-contributor-key) has the calls.
+A `live.sqlite` written by an earlier version is brought to the current
+layout when the service opens it; nothing stored is changed.
 
 ### Settings
 
@@ -660,7 +673,8 @@ uv run food-data export-layer --commit --push   # and pushes, when a remote exis
 The file written has the [layout of the layer](#the-kratheos-layer) and
 holds what users see and nothing else: no contributor key, hashed or not, no
 report, nothing moderation hid (a hidden food is left out with everything
-attached to it, a hidden version with its votes). Votes are counts. The same
+attached to it, a hidden version with its votes), nothing a blocked key
+wrote and none of its votes. Votes are counts. The same
 live data gives the same file, byte for byte, so a week without a change
 gives no commit; `--commit` commits that file only, whatever else changed in
 the repository. An export refuses to replace a layer that holds data by an

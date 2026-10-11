@@ -389,6 +389,7 @@ Every error is `{"code": ..., "message": ...}`; some carry one more field.
 | --- | --- | --- | --- |
 | 400 | `invalid_json` | the body is not a JSON object | |
 | 401 | `unauthorized` | a write or a moderation request without the service token | |
+| 403 | `contributor_blocked` | a write carrying a contributor key moderation blocked | |
 | 404 | `not_found` | no such food, version, report or endpoint; a hidden food | |
 | 405 | `method_not_allowed` | the endpoint does not answer this method | |
 | 409 | `barcode_exists` | a food already has the barcode (hidden or not) | `id` |
@@ -461,9 +462,18 @@ misspelt name would otherwise be lost silently.
   "closed_at", "hidden", "food"}`: `food` is the food record, served even
   when the food is hidden (`hidden` says so), `null` when it no longer
   exists. `lang` and `country` are accepted for that record. Who reported is
-  never returned.
+  never returned. One line per report, oldest first; `GET
+  /v1/moderation/foods` (below) gives them food by food.
 - `POST /v1/foods/{id}/reports` answers 202 with `{"id": <number>, "state":
-  "open"}`.
+  "open", "replaced": false, "reporters": 3, "reasons": {"inappropriate": 2,
+  "wrong_values": 1}}`. A person has one open report per food: reporting the
+  food again replaces the reason, the note and the date of the earlier one,
+  which keeps its number (`replaced` is then true). `reporters` is how many
+  different people have an open report on the food once this one is
+  recorded, `reasons` how many of them for each reason. Reports hide nothing
+  by themselves, whatever their number.
+- `POST /v1/foods/{id}/versions` also answers `"version_id"`, the identifier
+  of the version it created, beside `"versions"`.
 - `POST /v1/moderation/foods/{id}/hide` and `/restore` answer `{"id": ...,
   "hidden": true | false}`. `{id}` is the identifier of a food, or of one
   version (`kratheos:v:<uuid>`, `usda:branded:...`): a hidden version is not
@@ -476,3 +486,98 @@ misspelt name would otherwise be lost silently.
 - `POST /v1/foods/{id}/translations` answers the food record (200). A name
   added in Kratheos can be replaced by a later one.
 - `HEAD` is answered like `GET`, without the body.
+
+### Moderation: the reported foods
+
+- `GET /v1/moderation/foods?state=open|closed|all&limit=50&offset=0`
+  (`limit` at most 100, `lang` and `country` accepted for the record) lists
+  the foods people reported, the most reported first, then the most recently
+  reported. It returns `{"items": [...], "next_offset": ...}`, each item:
+
+  ```json
+  {
+    "food_id": "gtin:3017620422003",
+    "reporters": 3,
+    "reasons": {"inappropriate": 2, "other": 1},
+    "first_reported_at": "2026-10-11T14:03:22Z",
+    "last_reported_at": "2026-10-11T18:40:02Z",
+    "reports": [{"id": 2, "reason": "inappropriate", "note": "...", "state": "open",
+                 "created_at": "2026-10-11T14:03:22Z", "closed_at": null}],
+    "hidden": false,
+    "food": {"id": "gtin:3017620422003", "...": "the food record"}
+  }
+  ```
+
+  `reporters` counts the different people among the reports of the state
+  asked, `reasons` how many of them gave each reason (the most given first),
+  `reports` those reports, oldest first. `food` is as in the list of the
+  reports: served even when hidden, `null` when the food no longer exists.
+  Who reported is never returned.
+- `POST /v1/moderation/foods/{id}/reports/close` closes every open report
+  about a food and answers `{"id": ..., "closed": <how many>}`.
+
+### Moderation: one contributor key
+
+The public tables carry no author. The service keeps, in a history that is
+never exported, which keyed hash wrote each product, each version and each
+name; this is what lets a moderator undo the work of one key. The contract
+says the key only serves to count a person once: it now also serves this,
+and nothing else. A key is sent in the body of a request, never in its
+address (addresses are logged); what comes back is its keyed hash, never the
+key.
+
+- `POST /v1/moderation/contributors/lookup` with `{"contributor": "<key>"}`
+  tells what the key wrote:
+
+  ```json
+  {
+    "contributor": "<keyed hash>", "blocked": false, "blocked_at": null,
+    "counts": {"products": 1, "versions": 1, "translations": 1, "votes": 3, "reports": 1},
+    "products": [{"food_id": "gtin:...", "record_id": "kratheos:<uuid>", "name": "...",
+                  "at": "2026-10-11T14:03:22Z", "hidden": false}],
+    "versions": [{"version_id": "kratheos:v:<uuid>", "food_id": "...", "at": "...", "hidden": false}],
+    "translations": [{"food_id": "...", "language": "de", "name": "...", "at": "...", "current": true}],
+    "votes": [{"food_id": "...", "version_id": "...", "at": "..."}],
+    "reports": [{"id": 4, "food_id": "...", "reason": "other", "note": "", "state": "open", "at": "..."}]
+  }
+  ```
+
+  Each list holds the 500 most recent rows, `counts` all of them. `hidden`
+  says whether a product or a version is hidden, one by one or with its key;
+  `current` whether a name is still the one of the food in that language
+  (somebody else may have given another since). A key the service never saw
+  has empty lists. What a layer written elsewhere brought has no author.
+- `POST /v1/moderation/contributors/block` with `{"contributor": "<key>"}`
+  hides everything the key wrote and refuses its later writes, in one call.
+  Its products, its versions and the names it added that are still current
+  become invisible like any hidden record (not found, not listed, not
+  searched, left out of the export); its votes are no longer counted, so the
+  version served may change back; its reports are left out of the moderation
+  lists. Every later write carrying the key (`POST /v1/products`,
+  `.../versions`, `.../votes`, `.../translations`, `.../reports`) answers 403
+  `contributor_blocked`. It answers `{"blocked": true, "contributor":
+  "<keyed hash>", "blocked_at": "...", "withdrawn": {"products": 2,
+  "versions": 1, "translations": 1}}`. Blocking a key that already is
+  changes nothing and answers the same.
+- `POST /v1/moderation/contributors/unblock` with `{"contributor": "<key>"}`
+  undoes both and answers `{"blocked": false, "blocked_at": null,
+  "contributor": "<keyed hash>", "restored": {"products": 2, "versions": 1,
+  "translations": 1}}`. What the key wrote is served again exactly as
+  before, its votes count again and its reports are listed again. What
+  moderation hid one by one (`.../hide`) is a separate fact and stays
+  hidden; a name somebody else gave to a food while the key was blocked
+  stays the name of the food.
+- `GET /v1/moderation/foods/{id}/contributors` gives the keyed hashes of who
+  wrote a record, so that the backend can check its own log against the
+  history: `{"id": ..., "contributors": [{"contributor": "<keyed hash>",
+  "actions": ["create_product"], "first_at": "...", "last_at": "..."}]}`,
+  in the order of their first write. `{id}` is a food (who created it, who
+  added a name: `create_product`, `translate`) or a version (who proposed it,
+  who voted for it: `add_version`, `vote`); the record of a product added in
+  Kratheos (`kratheos:<uuid>`) also names whoever created it when the food
+  is named after its barcode. 404 `not_found` for an unknown record; an
+  empty list for a record of a source nobody wrote to. Compare with the
+  `contributor` that `lookup` answers for a key.
+
+None of this is ever exported: the weekly export holds no key, no keyed
+hash, no history and no list of blocked keys, only what is left visible.

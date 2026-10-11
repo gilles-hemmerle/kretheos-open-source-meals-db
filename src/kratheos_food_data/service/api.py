@@ -12,6 +12,11 @@ configured token they are refused altogether. Every error is
 Writes are applied one at a time: the check that a barcode, a version or a
 name is not there yet and the write that follows cannot be separated by
 another write.
+
+Moderation works on a food or a version (hide, restore, close its reports)
+and on a contributor key: what it wrote, hide all of it and refuse its later
+writes (`contributor_blocked`), and undo both. A key travels in the body of a
+request, never in its address, which is logged.
 """
 
 from __future__ import annotations
@@ -54,10 +59,12 @@ VERSION_FIELDS = ("basis", "nutrients", "servings", "countries", "contributor")
 VOTE_FIELDS = ("version_id", "contributor")
 TRANSLATION_FIELDS = ("language", "name", "contributor")
 REPORT_FIELDS = ("reason", "note", "contributor")
+CONTRIBUTOR_FIELDS = ("contributor",)
 REPORT_STATES = (live.REPORT_OPEN, live.REPORT_CLOSED, "all")
 ERROR_CODES = {
     "invalid_json": 400,
     "unauthorized": 401,
+    "contributor_blocked": 403,
     "not_found": 404,
     "method_not_allowed": 405,
     "barcode_exists": 409,
@@ -266,10 +273,22 @@ class Api:
                 return "GET", self._reports, ()
             case ["moderation", "reports", report_id, "close"]:
                 return "POST", self._close_report, (report_id,)
+            case ["moderation", "foods"]:
+                return "GET", self._reported_foods, ()
             case ["moderation", "foods", record_id, "hide"]:
                 return "POST", self._hide, (record_id, True)
             case ["moderation", "foods", record_id, "restore"]:
                 return "POST", self._hide, (record_id, False)
+            case ["moderation", "foods", record_id, "contributors"]:
+                return "GET", self._record_contributors, (record_id,)
+            case ["moderation", "foods", food_id, "reports", "close"]:
+                return "POST", self._close_food_reports, (food_id,)
+            case ["moderation", "contributors", "lookup"]:
+                return "POST", self._contributor, ()
+            case ["moderation", "contributors", "block"]:
+                return "POST", self._block, (True,)
+            case ["moderation", "contributors", "unblock"]:
+                return "POST", self._block, (False,)
         return None
 
     def _authorize(self, headers: Mapping[str, str]) -> None:
@@ -290,6 +309,21 @@ class Api:
             given.strip().encode("utf-8"), expected
         ):
             raise ApiError(401, "unauthorized", "the service token is missing or wrong")
+
+    def _refuse_blocked(self, context: Context, key: str) -> None:
+        """Refuse the write of a contributor key moderation blocked.
+
+        Args:
+            context: Both databases.
+            key: The contributor key of the write.
+
+        Raises:
+            ApiError: `contributor_blocked` when the key is blocked.
+        """
+        if live.blocked_at(context.live, self.store.contributor_hash(key)) is not None:
+            raise ApiError(
+                403, "contributor_blocked", "this contributor may no longer write to the catalogue"
+            )
 
     @staticmethod
     def _parameters(query: Mapping[str, str], allowed: tuple[str, ...]) -> None:
@@ -485,6 +519,7 @@ class Api:
             "countries": validation.countries(data.get("countries")),
         }
         with self._writing, self._context() as context:
+            self._refuse_blocked(context, key)
             if barcode:
                 owner = foods.barcode_owner(context, barcode)
                 if owner is not None:
@@ -517,6 +552,7 @@ class Api:
         portion = validation.serving(data.get("servings"), basis)
         countries = validation.countries(data.get("countries"))
         with self._writing, self._context() as context:
+            self._refuse_blocked(context, key)
             food = foods.find(context, validation.food_id(food_id))
             if food is None:
                 raise not_found()
@@ -548,7 +584,13 @@ class Api:
             fields = {"basis": basis, **values, **portion, "countries": countries}
             self.store.add_version(version_id, food.id, fields, key)
             food = foods.find(context, food.id)
-            return Response(201, {"versions": foods.render_versions(context, food, country)})
+            return Response(
+                201,
+                {
+                    "versions": foods.render_versions(context, food, country),
+                    "version_id": version_id,
+                },
+            )
 
     def _vote(self, food_id: str, query: Mapping, headers: Mapping, body: bytes) -> Response:
         """Give or move the vote of a person among the versions of a food."""
@@ -561,6 +603,7 @@ class Api:
         if not isinstance(version_id, str):
             raise invalid("version_id is required")
         with self._writing, self._context() as context:
+            self._refuse_blocked(context, key)
             food = foods.find(context, validation.food_id(food_id))
             if food is None:
                 raise not_found()
@@ -580,6 +623,7 @@ class Api:
         lang = validation.language(data.get("language"), "language", required=True)
         name = validation.text(data.get("name"), "name", validation.MAX_NAME, required=True)
         with self._writing, self._context() as context:
+            self._refuse_blocked(context, key)
             food = foods.find(context, validation.food_id(food_id))
             if food is None:
                 raise not_found()
@@ -600,11 +644,20 @@ class Api:
         reason = validation.report_reason(data.get("reason"))
         note = validation.text(data.get("note"), "note", validation.MAX_NOTE) or ""
         with self._writing, self._context() as context:
+            self._refuse_blocked(context, key)
             food = foods.find(context, validation.food_id(food_id))
             if food is None:
                 raise not_found()
-            report_id = self.store.report(food.id, reason, note, key)
-            return Response(202, {"id": report_id, "state": live.REPORT_OPEN})
+            report_id, replaced = self.store.report(food.id, reason, note, key)
+            return Response(
+                202,
+                {
+                    "id": report_id,
+                    "state": live.REPORT_OPEN,
+                    "replaced": replaced,
+                    **live.open_reports_of(context.live, food.id),
+                },
+            )
 
     # --- moderation ----------------------------------------------------
 
@@ -667,12 +720,123 @@ class Api:
         self._parameters(query, ())
         record_id = validation.food_id(record_id)
         with self._writing, self._context() as context:
-            known = (
-                foods.find(context, record_id, include_hidden=True) is not None
-                or live.version_owner(context.live, record_id) is not None
-                or catalogue.food_of_version(context.base, record_id) is not None
-            )
-            if not known:
+            if not self._known_record(context, record_id):
                 raise not_found("food or version")
             self.store.set_hidden(record_id, hidden)
         return Response(200, {"id": record_id, "hidden": hidden})
+
+    def _reported_foods(self, query: Mapping, headers: Mapping, body: bytes) -> Response:
+        """List the foods people reported, the most reported first."""
+        self._authorize(headers)
+        self._parameters(query, ("state", "limit", "offset", *READ_PARAMETERS))
+        language, country = self._locale(query)
+        state = validation.choice(query.get("state"), "state", REPORT_STATES) or live.REPORT_OPEN
+        limit = validation.integer(
+            query.get("limit"), "limit", validation.MAX_LIMIT, 1, validation.MAX_REPORTS_LIMIT
+        )
+        offset = validation.integer(query.get("offset"), "offset", 0, 0, 10**8)
+        with self._context() as context:
+            items = live.reported_foods(
+                context.live, None if state == "all" else state, limit + 1, offset
+            )
+            food_ids = [item["food_id"] for item in items[:limit]]
+            found = foods.assemble(
+                context,
+                catalogue.foods_by_id(context.base, food_ids),
+                food_ids,
+                include_hidden=True,
+            )
+            for item in items[:limit]:
+                food = found.get(item["food_id"])
+                item["hidden"] = bool(food and food.hidden)
+                item["food"] = food and foods.render_food(context, food, language, country)
+            return Response(
+                200,
+                {
+                    "items": items[:limit],
+                    "next_offset": offset + limit if len(items) > limit else None,
+                },
+            )
+
+    def _close_food_reports(
+        self, food_id: str, query: Mapping, headers: Mapping, body: bytes
+    ) -> Response:
+        """Close every open report about a food."""
+        self._authorize(headers)
+        self._parameters(query, ())
+        food_id = validation.food_id(food_id)
+        with self._writing:
+            closed = self.store.close_reports_of(food_id)
+        return Response(200, {"id": food_id, "closed": closed})
+
+    def _known_record(self, context: Context, record_id: str) -> bool:
+        """Tell whether an identifier is one of a food or of a version, hidden or not.
+
+        Args:
+            context: Both databases.
+            record_id: The identifier.
+
+        Returns:
+            True when a food or a version has it.
+        """
+        return (
+            foods.find(context, record_id, include_hidden=True) is not None
+            or live.version_owner(context.live, record_id) is not None
+            or catalogue.food_of_version(context.base, record_id) is not None
+        )
+
+    def _record_contributors(
+        self, record_id: str, query: Mapping, headers: Mapping, body: bytes
+    ) -> Response:
+        """Give the keyed hashes of who wrote a food or a version."""
+        self._authorize(headers)
+        self._parameters(query, ())
+        record_id = validation.food_id(record_id)
+        with self._context() as context:
+            if not self._known_record(context, record_id):
+                raise not_found("food or version")
+            return Response(
+                200,
+                {
+                    "id": record_id,
+                    "contributors": live.record_contributors(context.live, record_id),
+                },
+            )
+
+    def _contributor(self, query: Mapping, headers: Mapping, body: bytes) -> Response:
+        """Tell what a contributor key wrote, and whether it is blocked."""
+        self._authorize(headers)
+        self._parameters(query, ())
+        key = validation.contributor(validation.parse_body(body, CONTRIBUTOR_FIELDS))
+        author = self.store.contributor_hash(key)
+        with self._context() as context:
+            written = live.written_by(context.live, author)
+            record_ids = [product["record_id"] for product in written["products"]]
+            record_ids += [version["version_id"] for version in written["versions"]]
+            hidden = live.hidden_among(context.live, record_ids)
+            for product in written["products"]:
+                product["hidden"] = product["record_id"] in hidden
+            for version in written["versions"]:
+                version["hidden"] = version["version_id"] in hidden
+            blocked_at = live.blocked_at(context.live, author)
+            return Response(
+                200,
+                {
+                    "contributor": author,
+                    "blocked": blocked_at is not None,
+                    "blocked_at": blocked_at,
+                    "counts": {kind: len(rows) for kind, rows in written.items()},
+                    **{kind: rows[: live.CONTRIBUTOR_ROWS] for kind, rows in written.items()},
+                },
+            )
+
+    def _block(self, blocked: bool, query: Mapping, headers: Mapping, body: bytes) -> Response:
+        """Hide what a contributor key wrote and refuse its writes, or undo it."""
+        self._authorize(headers)
+        self._parameters(query, ())
+        key = validation.contributor(validation.parse_body(body, CONTRIBUTOR_FIELDS))
+        with self._writing:
+            if blocked:
+                done = self.store.block(key)
+                return Response(200, {"blocked": True, **done})
+            return Response(200, {"blocked": False, "blocked_at": None, **self.store.unblock(key)})

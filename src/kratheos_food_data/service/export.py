@@ -5,11 +5,13 @@ and holds what users see and nothing else:
 
 * the products added, the versions proposed and the names added, except what
   moderation hid: a hidden food is left out with everything attached to it,
-  a hidden version with its votes;
-* the votes as one count per version. The table saying which contributor key
-  voted for what is never read by this module: counting is done in SQL, and
-  no key, hashed or not, reaches the file;
-* no report, no history, nothing about who.
+  a hidden version with its votes. What a blocked contributor key wrote is
+  hidden the same way, for as long as the key is blocked;
+* the votes as one count per version, those of a blocked key left out. The
+  table saying which contributor key voted for what is never read by this
+  module: counting is done in SQL, and no key, hashed or not, reaches the
+  file;
+* no report, no history, no blocked key, nothing about who.
 
 The same live data always gives the same file, byte for byte: the file is
 created anew, rows are written in the order of their identifiers in a single
@@ -89,6 +91,16 @@ def read_live(path: Path) -> kratheos.Layer:
         connection.execute("PRAGMA query_only = 1")
         connection.execute("BEGIN")
         hidden = {row[0] for row in connection.execute("SELECT record_id FROM hidden")}
+        # A live database no service opened since layout 2 has no blocked key.
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master")}
+        blocks = "blocked" in tables and "withdrawn" in tables
+        withdrawn_names: set[tuple[str, str]] = set()
+        if blocks:
+            for row in connection.execute("SELECT record_id, lang FROM withdrawn"):
+                if row["lang"]:
+                    withdrawn_names.add((row["record_id"], row["lang"]))
+                else:
+                    hidden.add(row["record_id"])
         layer = kratheos.Layer(meta={"schema_version": str(kratheos.SCHEMA_VERSION)})
         latest = [
             connection.execute(f"SELECT max({column}) FROM {table}").fetchone()[0]
@@ -99,6 +111,7 @@ def read_live(path: Path) -> kratheos.Layer:
                 ("votes", "voted_at"),
                 ("anonymous_votes", "updated_at"),
                 ("hidden", "hidden_at"),
+                *((("blocked", "blocked_at"),) if blocks else ()),
             )
         ]
         layer.meta["exported_at"] = max((stamp for stamp in latest if stamp), default="")
@@ -139,7 +152,7 @@ def read_live(path: Path) -> kratheos.Layer:
             )
 
         for row in connection.execute("SELECT * FROM translations ORDER BY food_id, lang"):
-            if row["food_id"] in hidden:
+            if row["food_id"] in hidden or (row["food_id"], row["lang"]) in withdrawn_names:
                 continue
             layer.translations.append(
                 {
@@ -151,13 +164,14 @@ def read_live(path: Path) -> kratheos.Layer:
                 }
             )
 
+        not_blocked = "WHERE contributor NOT IN (SELECT contributor FROM blocked)" if blocks else ""
         counted = connection.execute(
-            """
+            f"""
             SELECT version_id, min(food_id) AS food_id, sum(votes) AS votes,
                    max(updated_at) AS updated_at
             FROM (
                 SELECT version_id, food_id, count(*) AS votes, max(voted_at) AS updated_at
-                FROM votes GROUP BY version_id, food_id
+                FROM votes {not_blocked} GROUP BY version_id, food_id
                 UNION ALL
                 SELECT version_id, food_id, votes, updated_at FROM anonymous_votes
             )
