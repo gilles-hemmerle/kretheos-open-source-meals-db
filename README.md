@@ -79,7 +79,7 @@ served from `dist/`.
 | `swiss` | [Swiss Food Composition Database](https://naehrwertdaten.ch/) | FSVO, Switzerland | 7.1 (2026-07) | opendata.swiss "Open use. Must provide the source." |
 | `cnf` | [Canadian Nutrient File](https://open.canada.ca/data/en/dataset/1b6139bd-ed7e-4043-bc28-ff00e10f3109) | Health Canada | 2026 | Open Government Licence - Canada |
 | `cofid` | [CoFID](https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid) | Public Health England | 2021 | Open Government Licence v3.0 |
-| `chain` | [Restaurant chains](#restaurant-chains) | each chain, on its own site | the files of `sources/chains/` | none: see below |
+| `chain` | [Kratheos](#restaurant-chains): products of restaurant chains | Kratheos | the files of `sources/chains/` | none: see below |
 
 `sources.toml` holds, for each source, the page where its terms were read,
 the sentence that allows redistribution and the date it was checked. Two
@@ -87,8 +87,9 @@ databases are listed there but disabled, with the reason: the German BLS 4.0
 (free to use, but no licence text and nothing on redistribution) and FoodRepo
 (the service closed). A downloaded source is only enabled once its terms
 clearly allow redistribution. `chain` is the one source that is not an open
-database: it holds nothing unless files are committed for it, and committing
-one is a decision about that chain ([Restaurant chains](#restaurant-chains)).
+database: the values restaurant chains publish for their products, compiled
+by Kratheos and committed in `sources/chains/`
+([Restaurant chains](#restaurant-chains)).
 
 **How the output is licensed.** Open Food Facts is share-alike, so the
 database as a whole is made available under the
@@ -499,6 +500,9 @@ one.
 - **`sources/<id>/`**, committed: the small sources (Ciqual, the Swiss table,
   the Canadian file, CoFID), each file next to a `.meta.json` sidecar with
   its address, download date and checksums.
+- **`sources/chains/`**, committed: the files of the source `chain`, which
+  no publisher offers for download ([Restaurant chains](#restaurant-chains)).
+  They have no sidecar: the manifest of a build records their checksums.
 - **`mirror/`**, not in git: the large ones, under the flat name
   `<id>.<file name>` (`off.food.parquet`, `usda.branded_food_csv.zip`...),
   with `MIRROR.json`, which indexes them. They are meant to be attached to a
@@ -586,34 +590,50 @@ nobody edits it by hand.
 
 ## Restaurant chains
 
-The big chains publish the nutrition values of their menu on their own
-sites. The source `chain` reads them from CSV files committed in
-`sources/chains/`, one per chain and country (`burgerking_ch.csv`). The build
-never downloads them, and **the repository ships none**: these values are not
-under an open licence, and whether those of a chain may be published is a
-decision to take chain by chain, by whoever commits its file. Without a file
-the source is there and empty.
+Restaurant chains publish the nutrition values of their products. Kratheos
+compiles them, one chain and one country at a time, and the source `chain`
+reads them from the CSV files committed in `sources/chains/`, one per chain
+and country (`mcdonalds_fr.csv`). The build never downloads them. The source
+is presented under the name **Kratheos**: these are the values the chains
+publish for their products, compiled by Kratheos. The repository ships 35
+files, 16 chains in France, Switzerland, Germany, Italy and Spain, which give
+3 837 products. Without a file the source is there and empty.
 
 Columns read (a file may hold more): `chain`, `country`, `language`,
 `product_name`, `category`, `product_key`, `portion_size`, `portion_unit`
 (`g` or `ml`), `is_drink` (`yes` or `no`), `energy_kcal_per_100`,
 `protein_g_per_100`, `carbohydrate_g_per_100`, `sugars_g_per_100`,
 `fat_g_per_100`, `saturated_fat_g_per_100`, `fibre_g_per_100`,
-`salt_g_per_100`, `source_url`, `date_collected`.
+`salt_g_per_100`; and, when the file has them, `date_collected` and the eight
+`..._per_portion` columns.
+
+The committed files hold more than the build reads: the values per portion,
+what the chain gave (`values_given`: per portion, per 100, or both; a cell the
+chain does not publish is computed from the other basis and the weight of the
+portion), where each row was read (`source_url`) and what a check found odd
+in it (`sanity_flags`). They are the trace of the collection. `source_url`
+stays there: a record of the database links to no page of a chain.
 
 Each line becomes a product without barcode: the chain is its brand, the
-country of the file its country, the name is in the language of the file,
-`source_url` is the page the values were read on and `date_collected` its
-date. Values are per 100 g, or per 100 ml when the portion is in ml.
+country of the file its country, the name is in the language of the file and
+`date_collected` is its date. Its identifier is `chain:<chain>:<country>:<key>`,
+with the key the chain gives the product, or its name when the chain gives
+none; lines of a file that share an identifier are one product, the first.
+Values are per 100 g, or per 100 ml when the portion is in ml. The portion of
+a product is the one its chain gives, when the chain gives its weight.
 Carbohydrate is available carbohydrate, except for the United States and
 Canada, where menus give the total and fibre is subtracted. Two files of the
-same chain and country in two languages give one product with two names. A
-line without energy is dropped and counted; a line whose values make no sense
-is kept and flagged, like any record.
+same chain and country in two languages give one product with two names.
+
+A line whose values are given per portion only, for a portion the chain
+publishes no weight for, cannot be expressed per 100 g: it is left out and
+counted per file (`rows_per_portion_only` in the manifest), and no weight is
+ever guessed. A line without energy is dropped and counted; a line whose
+values make no sense is kept and flagged, like any record.
 
 Records of this source carry the licence `publisher-terms`: no open licence.
-Someone who publishes a database built with such files publishes those values
-with it.
+Someone who publishes a database built with these files publishes those
+values with it.
 
 ## The service
 

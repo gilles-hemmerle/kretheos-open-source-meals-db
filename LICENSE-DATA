@@ -40,8 +40,9 @@ name of that licence, its address and the attribution to reproduce:
            Database (FSVO)           provide the source."
   cnf      Canadian Nutrient File    Open Government Licence - Canada
   cofid    CoFID (United Kingdom)    Open Government Licence v3.0
-  chain    Restaurant chains         no open licence: the values each chain
-                                     publishes on its own site (see below)
+  chain    Kratheos                  no open licence: the values restaurant
+                                     chains publish for their products,
+                                     compiled by Kratheos (see below)
   kratheos Kratheos and its users    ODbL 1.0
 
 The files dist/generic_foods.* hold no record of Open Food Facts: someone who
@@ -66,17 +67,16 @@ is made available under the same Open Database License. It holds no personal
 data: no account, no handle, no identifier of a person; who proposed a
 version or voted for one is not in it.
 
-5. Restaurant chains
---------------------
+5. Products of restaurant chains
+--------------------------------
 
-The source `chain` is not an open database. It reads files committed to
-sources/chains/, which hold the nutrition values restaurant chains publish on
-their own sites, and this repository ships none of them: a database built
-from it as it is holds no such record. Whoever commits a file for a chain
-decides that the values of that chain may be published, and a database built
-with it carries them with the licence `publisher-terms` in their `licence`
-column: they are not covered by the Open Database License of sections 1 and
-2, and each record links to the page of the chain it was read on.
+The source `chain`, presented under the name Kratheos, is not an open
+database. It reads the files committed to sources/chains/: the nutrition
+values that restaurant chains publish for their products, compiled by
+Kratheos. A database built from this repository carries them with the licence
+`publisher-terms` in their `licence` column: they are not covered by the Open
+Database License of sections 1 and 2, and someone who publishes the database
+publishes those values with it.
 
 6. No warranty
 --------------

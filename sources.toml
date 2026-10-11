@@ -274,15 +274,16 @@ reason = ""
   url = "https://assets.publishing.service.gov.uk/media/60538b91e90e07527df82ae4/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021..xlsx"
   sha256 = "436e9445ef2adb2a75f3d7edd51302de3adad25385f9795fc94ba58bd030e97d"
 
-# The nutrition values restaurant chains publish on their own sites. Not an
-# open database and not downloaded by the build: one CSV file per chain and
-# country, committed to sources/chains/ by the owner of the repository once
-# he has decided that the values of that chain may be published. The
-# repository ships none, and the source is empty without a file.
+# The nutrition values restaurant chains publish for their products, compiled
+# by Kratheos. Not an open database and not downloaded by the build: one CSV
+# file per chain and country, committed to sources/chains/ once its values
+# were checked. The source is presented under the name Kratheos; its id stays
+# `chain`, the prefix of the identifiers of its records, which never change.
+# The source is empty without a file.
 [[source]]
 id = "chain"
-name = "Restaurant chains"
-publisher = "Each chain, on its official site"
+name = "Kratheos"
+publisher = "Kratheos"
 homepage = ""
 adapter = "chain"
 version = "files of sources/chains/"
@@ -290,12 +291,12 @@ released = ""
 kinds = ["product"]
 priority = 7
 licence = "publisher-terms"
-licence_name = "No open licence: nutrition values published by each chain on its official site"
+licence_name = "No open licence: nutrition values restaurant chains publish for their products"
 licence_url = ""
 terms_url = ""
 terms_quote = ""
 terms_checked = ""
-attribution = "Nutrition values of restaurant chains, as each chain publishes them on its official site; every record links to the page it was read on."
+attribution = "Nutrition values that restaurant chains publish for their products, compiled by Kratheos."
 share_alike = false
 country = ""
 mirror = "git"

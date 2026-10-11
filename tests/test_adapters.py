@@ -279,3 +279,37 @@ def test_chain_identifiers_and_cells(tmp_path) -> None:
     incomplete.write_text("chain,country\nX,CH\n", encoding="utf-8")
     with pytest.raises(ValueError, match="missing columns language"):
         chain.read_file(incomplete)
+
+
+def test_chain_file_without_origin_columns_and_rows_per_portion_only(tmp_path) -> None:
+    """A file needs no column saying where it was read; a row per portion only is left out."""
+    from kratheos_food_data.adapters import chain
+
+    per_100 = list(chain.VALUE_COLUMNS)
+    header = [
+        "chain", "country", "language", "product_name", "category", "product_key",
+        "portion_size", "portion_unit", "is_drink", *chain.PORTION_COLUMNS, *per_100,
+    ]  # fmt: skip
+    burger = ["X", "CH", "fr", "Burger", "", "b-1", "200", "g", "no"] + ["500"] + [""] * 7
+    burger += ["250", "13", "20", "4", "13", "5", "2", "1.2"]
+    # The chain gives 180 kcal per portion and no weight for that portion.
+    ice = ["X", "CH", "fr", "Glace", "", "g-1", "", "", "no", "180"] + [""] * 7 + [""] * 8
+    empty = ["X", "CH", "fr", "Sauce", "", "s-1", "", "", "no"] + [""] * 16
+    path = tmp_path / "x_ch.csv"
+    lines = [header, burger, ice, empty]
+    path.write_text("\n".join(",".join(cells) for cells in lines) + "\n", encoding="utf-8")
+    rows, left_out = chain.read_file(path)
+    assert left_out == 1
+    assert [row["source_record_id"] for row in rows] == ["x:ch:b-1", "x:ch:s-1"]
+    assert rows[0]["energy_kcal"] == 250.0 and rows[0]["serving_size"] == 200.0
+    assert rows[0]["source_url"] is None and rows[0]["updated_at"] is None
+    assert rows[1]["energy_kcal"] is None  # no value at all: dropped later, as without energy
+
+    with_origin = tmp_path / "y_ch.csv"
+    header += ["source_url", "date_collected"]
+    lines = [header, [*burger, "https://example.org/b", "2026-10-11"]]
+    with_origin.write_text("\n".join(",".join(c) for c in lines) + "\n", encoding="utf-8")
+    rows, left_out = chain.read_file(with_origin)
+    # The date is read; where the row was read stays in the file.
+    assert left_out == 0 and rows[0]["updated_at"] == "2026-10-11"
+    assert rows[0]["source_url"] is None

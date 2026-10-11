@@ -867,6 +867,8 @@ def test_chain_files_become_products_without_barcode(repository: Workspace) -> N
     assert chain["adapter"] == {
         "files": {"exemple_ch.csv": 6, "exemple_ch_de.csv": 1, "exemple_us.csv": 1},
         "rows_in_files": 8,
+        # Values per portion only and no weight for the portion: not per 100 g.
+        "rows_per_portion_only": {"exemple_ch.csv": 1},
         "repeated_products_skipped": 1,
         "products_identified_by_name": 1,
         "rows_staged": 6,
@@ -904,7 +906,7 @@ def test_chain_files_become_products_without_barcode(repository: Workspace) -> N
         "g",
         0,
         '["CH"]',
-        "https://example.org/ch/fr/burger-du-test",
+        None,  # where a row was read stays in the file: no link to the page of a chain
         "2026-10-11",
         1,
         "publisher-terms",

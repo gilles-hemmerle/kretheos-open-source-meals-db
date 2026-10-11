@@ -1,9 +1,10 @@
-"""Adapter for the nutrition values restaurant chains publish on their sites.
+"""Adapter for the nutrition values restaurant chains publish for their products.
 
 This source is not downloaded. It reads whatever CSV files are committed in
 `sources/chains/`, one per chain and country (`burgerking_ch.csv`), and is
-simply empty when the directory holds none. Whether the values of a chain
-may be published is decided chain by chain by whoever commits its file.
+simply empty when the directory holds none. The files are compiled by
+Kratheos from what each chain publishes, and the source is presented under
+that name: a record carries no link to the page of a chain.
 
 Columns read (a file may have more, they are ignored):
 
@@ -13,7 +14,14 @@ Columns read (a file may have more, they are ignored):
   `sugars_g_per_100`, `fat_g_per_100`, `saturated_fat_g_per_100`,
   `fibre_g_per_100`, `salt_g_per_100`: per 100 g, or per 100 ml when the
   portion is in ml;
-* `source_url` (the page the values were read on) and `date_collected`.
+* `energy_kcal_per_portion` and the seven other `..._per_portion` columns,
+  when the file has them: only to recognise a row that gives its values per
+  portion and nothing per 100;
+* `date_collected`, when the file has it: the day the values were read.
+
+`source_url`, when a file has it, is where the values of the row were read.
+It stays in the file, which is the trace of the collection, and is not
+carried into the database.
 
 What becomes of a row:
 
@@ -27,7 +35,10 @@ What becomes of a row:
 * the same key in two files of the same chain and country (one per language)
   is one product with two names;
 * carbohydrate is available carbohydrate, as on European menus, except in
-  the United States and Canada where menus give total carbohydrate.
+  the United States and Canada where menus give total carbohydrate;
+* a row whose values are given per portion only, the chain publishing no
+  weight for that portion, cannot be expressed per 100 g: it is left out and
+  counted, per file. No weight is ever guessed.
 
 Nothing is corrected: a row whose values make no sense is kept and flagged by
 the same quality checks as every other source.
@@ -64,9 +75,9 @@ REQUIRED_COLUMNS = (
     "saturated_fat_g_per_100",
     "fibre_g_per_100",
     "salt_g_per_100",
-    "source_url",
-    "date_collected",
 )
+# Read when a file has them; a file without them is complete all the same.
+DATE_COLUMN = "date_collected"
 # Column of the file -> staging column.
 VALUE_COLUMNS = {
     "energy_kcal_per_100": "energy_kcal",
@@ -78,6 +89,8 @@ VALUE_COLUMNS = {
     "fibre_g_per_100": "fiber_g",
     "salt_g_per_100": "salt_g",
 }
+# Columns of the values per portion, in a file that has them.
+PORTION_COLUMNS = tuple(column.replace("_per_100", "_per_portion") for column in VALUE_COLUMNS)
 UNITS = ("g", "ml")
 TRUE_WORDS = {"yes", "true", "1", "oui", "ja"}
 FALSE_WORDS = {"no", "false", "0", "non", "nein"}
@@ -180,15 +193,35 @@ def parse_date(cell: str | None) -> str | None:
         return None
 
 
-def read_file(path: Path) -> list[dict]:
+def per_portion_only(line: dict) -> bool:
+    """Tell whether a line gives its values per portion and none per 100.
+
+    Such a line is one whose portion has no published weight: a file is
+    completed before it is committed, so a portion with a weight always has
+    its values per 100 too.
+
+    Args:
+        line: A line of a file, by column name.
+
+    Returns:
+        True when a value per portion is a number and no value per 100 is.
+    """
+    if any(parse_number(line.get(column)) is not None for column in VALUE_COLUMNS):
+        return False
+    return any(parse_number(line.get(column)) is not None for column in PORTION_COLUMNS)
+
+
+def read_file(path: Path) -> tuple[list[dict], int]:
     """Read one file of a chain as staging rows.
 
     Args:
         path: Path of the CSV file.
 
     Returns:
-        One row per line that names a chain, a country and a product, with an
-        extra key `_from_name` telling how it is identified.
+        One row per line that names a chain, a country and a product and can
+        be expressed per 100 g or 100 ml, with an extra key `_from_name`
+        telling how it is identified; and the number of lines left out
+        because their values are per portion only.
 
     Raises:
         ValueError: When the file lacks one of the columns read.
@@ -200,12 +233,16 @@ def read_file(path: Path) -> list[dict]:
             raise ValueError(f"{path.name}: missing columns {', '.join(missing)}")
         lines = list(reader)
     rows = []
+    left_out = 0
     for line in lines:
         chain = clean_text(line["chain"])
         country = (clean_text(line["country"]) or "").upper()
         language = (clean_text(line["language"]) or "").lower()
         name = clean_text(line["product_name"])
         if not chain or not name or not language or not (len(country) == 2 and country.isalpha()):
+            continue
+        if per_portion_only(line):
+            left_out += 1
             continue
         identifier, from_name = record_id(chain, country, clean_text(line["product_key"]), name)
         unit = (clean_text(line["portion_unit"]) or "").lower()
@@ -226,14 +263,15 @@ def read_file(path: Path) -> list[dict]:
             "serving_unit": unit if unit in UNITS and size and size > 0 else None,
             "is_drink": parse_flag(line["is_drink"]),
             "countries": [country],
-            "source_url": clean_text(line["source_url"]),
-            "updated_at": parse_date(line["date_collected"]),
+            # Where a row was read stays in the file: see the module docstring.
+            "source_url": None,
+            "updated_at": parse_date(line.get(DATE_COLUMN)),
             "_from_name": from_name,
         }
         for column, target in VALUE_COLUMNS.items():
             staged[target] = parse_number(line[column])
         rows.append(staged)
-    return rows
+    return rows, left_out
 
 
 def merge_rows(rows: list[dict]) -> tuple[list[dict], int]:
@@ -270,13 +308,17 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
         context: The adapter context, holding every file of `sources/chains/`.
 
     Returns:
-        The number of files and rows, and the most recent collection date.
+        The number of files and rows, the rows left out because their values
+        are per portion only, and the most recent collection date.
     """
     rows: list[dict] = []
     per_file: dict[str, int] = {}
+    per_portion: dict[str, int] = {}
     for name in sorted(context.files):
-        read = read_file(context.files[name])
+        read, left_out = read_file(context.files[name])
         per_file[name] = len(read)
+        if left_out:
+            per_portion[name] = left_out
         rows += read
     merged, repeated = merge_rows(rows)
     from_name = sum(1 for row in merged if row.pop("_from_name"))
@@ -290,6 +332,7 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
         stats={
             "files": per_file,
             "rows_in_files": len(rows),
+            "rows_per_portion_only": per_portion,
             "repeated_products_skipped": repeated,
             "products_identified_by_name": from_name,
             "rows_staged": written,

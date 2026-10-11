@@ -10,8 +10,8 @@ A short form for an application's "About" screen:
 
     Food data: Open Food Facts (ODbL), USDA FoodData Central, Ciqual (Anses),
     Swiss Food Composition Database (FSVO), Canadian Nutrient File (Health
-    Canada), CoFID (UK). Database made available under the Open Database
-    License.
+    Canada), CoFID (UK), Kratheos. Database made available under the Open
+    Database License.
 
 with links to https://openfoodfacts.org and to the licence,
 https://opendatacommons.org/licenses/odbl/1-0/. Open Food Facts also asks
@@ -54,13 +54,10 @@ McCance and Widdowson's The Composition of Foods Integrated Dataset (CoFID)
 Public Health England, McCance and Widdowson's The Composition of Foods Integrated Dataset 2021. Contains public sector information licensed under the Open Government Licence v3.0.
 Licence: https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
 
-Restaurant chains
------------------
-Nutrition values of restaurant chains, as each chain publishes them on its official site; every record links to the page it was read on.
-No open licence. The database only holds such records when files were committed
-to sources/chains/, which this repository does not ship: name each chain whose
-values you publish, with a link to its site.
-
 Kratheos
 --------
+Nutrition values that restaurant chains publish for their products, compiled by Kratheos.
+These are the records of the source `chain`, read from the files of
+sources/chains/. No open licence covers them: see LICENSE-DATA, section 5.
+
 Contains data added by the users of Kratheos, available under the Open Database License (ODbL) 1.0.
