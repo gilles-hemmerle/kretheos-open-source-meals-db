@@ -503,16 +503,20 @@ def food_servings(food: Food, served: Mapping, language: str | None) -> list[dic
     Returns:
         The portion of the version served (the serving of a label), if it
         has one, then the household portions of the food: those of its
-        source, then those people added.
+        source, then those people added. A portion that reads exactly like
+        one listed before it (same label for this request, same amount,
+        same unit) is listed once: a version proposed with "1 large", 50 g
+        as its own portion does not show it twice.
     """
-    return _servings(served) + [
-        {
-            "label": resolve_label(portion["labels"], language),
-            "amount": portion["amount"],
-            "unit": portion["unit"],
-        }
-        for portion in food.portions
-    ]
+    listed = _servings(served)
+    seen = {(serving["label"], serving["amount"], serving["unit"]) for serving in listed}
+    for portion in food.portions:
+        label = resolve_label(portion["labels"], language)
+        key = (label, portion["amount"], portion["unit"])
+        if key not in seen:
+            seen.add(key)
+            listed.append({"label": label, "amount": portion["amount"], "unit": portion["unit"]})
+    return listed
 
 
 def _nutrients(version: Mapping) -> dict:

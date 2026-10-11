@@ -438,6 +438,17 @@ def test_a_person_adds_a_portion_for_everyone(service: Running) -> None:
     assert validation.fold("1 Œuf  Moyen") == validation.fold("1 oeuf moyen") == "1 oeuf moyen"
 
 
+def test_a_portion_that_reads_like_the_one_of_the_label_is_listed_once(service: Running) -> None:
+    """The serving of a version and a portion of the food with the same words and weight: once."""
+    burger = service.post("/v1/products", PRODUCT)[1]["id"]
+    same = {"language": "fr", "label": "1 burger", "amount": 180, "unit": "g", "contributor": BOB}
+    assert service.post(f"/v1/foods/{burger}/portions", same)[0] == 201
+    assert service.food(burger)["servings"] == [{"label": "1 burger", "amount": 180.0, "unit": "g"}]
+    other = dict(same, label="1 demi-burger", amount=90)
+    assert service.post(f"/v1/foods/{burger}/portions", other)[0] == 201
+    assert [s["label"] for s in service.food(burger)["servings"]] == ["1 burger", "1 demi-burger"]
+
+
 def test_moderation_reaches_the_portions(service: Running) -> None:
     """What a key wrote includes its portions; blocking it, or hiding a food, hides them."""
     target = f"/v1/foods/{APRICOT}/portions"

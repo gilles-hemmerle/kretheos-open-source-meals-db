@@ -247,7 +247,9 @@ served.
    grams, whatever the label says ("250 ml" of a food of the Canadian file
    weighs what the file gives); a portion people add is in `g` or in `ml`
    as they say. The service never converts one into the other: a client
-   uses the portions whose unit it can count the food in.
+   uses the portions whose unit it can count the food in. A portion that
+   reads exactly like one listed before it (same label for the request,
+   same amount, same unit) is listed once.
 6. **`updated_at` is a day**, written at midnight UTC: the sources and the
    layer store dates.
 7. **Alcohol.** `nutrients.alcohol_g` (grams per 100 g or 100 ml) is part
