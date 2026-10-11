@@ -243,3 +243,39 @@ def test_cofid(declared_sources: dict[str, Source], adapter_context: callable) -
     assert beer["source_flags"] == [schema.FLAG_INEXACT_VALUES]
     assert rows["17-063"]["fiber_g"] == 0.0  # NSP when there is no AOAC value
     assert rows["19-999"]["energy_kcal"] is None
+
+
+def test_chain_identifiers_and_cells(tmp_path) -> None:
+    """A chain product is identified by chain, country and key, in at most 74 characters."""
+    from kratheos_food_data.adapters import chain
+
+    assert chain.slug("Chaîne  Exemple & Fils") == "chaine-exemple-fils"
+    assert chain.record_id("Burger King", "CH", "b3c0ce68-1261", "Whopper") == (
+        "burger-king:ch:b3c0ce68-1261",
+        False,
+    )
+    # No key on the site: the name, as long as the chain keeps it.
+    assert chain.record_id("KFC", "ch", None, "Hot Wings® Aile supérieure") == (
+        "kfc:ch:hot-wings-aile-superieure",
+        True,
+    )
+    # A key that is not plain is written like a name, and stays a key.
+    assert chain.record_id("KFC", "CH", "menu/42 b", "x") == ("kfc:ch:menu-42-b", False)
+    long_name = "Menu " + "très " * 30 + "long"
+    identifier, from_name = chain.record_id("KFC", "CH", "", long_name)
+    assert from_name and len(identifier) == chain.MAX_RECORD_ID_LENGTH
+    assert identifier == chain.record_id("KFC", "CH", "", long_name)[0]
+    assert identifier != chain.record_id("KFC", "CH", "", long_name + " bis")[0]
+
+    assert chain.parse_number(" 12,5 ") == 12.5
+    assert chain.parse_number("") is None and chain.parse_number("n/a") is None
+    assert chain.parse_number("nan") is None and chain.parse_number("inf") is None
+    assert chain.parse_flag("Yes") is True and chain.parse_flag("no") is False
+    assert chain.parse_flag("") is None
+    assert chain.parse_date("2026-10-11") == "2026-10-11"
+    assert chain.parse_date("11.10.2026") is None
+
+    incomplete = tmp_path / "incomplete.csv"
+    incomplete.write_text("chain,country\nX,CH\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="missing columns language"):
+        chain.read_file(incomplete)

@@ -18,6 +18,10 @@ https://opendatacommons.org/licenses/odbl/1-0/. Open Food Facts also asks
 that a record of a product links to its page, which is the `source_url` of
 the record.
 
+A service run from this repository serves the same texts with the data:
+GET /v1/meta gives the notice of the database and, for each source, its
+licence and the credit below.
+
 Open Food Facts
 ---------------
 Contains data from Open Food Facts (https://openfoodfacts.org), available under the Open Database License (ODbL) 1.0; individual contents under the Database Contents License (DbCL) 1.0.
@@ -49,6 +53,13 @@ McCance and Widdowson's The Composition of Foods Integrated Dataset (CoFID)
 ---------------------------------------------------------------------------
 Public Health England, McCance and Widdowson's The Composition of Foods Integrated Dataset 2021. Contains public sector information licensed under the Open Government Licence v3.0.
 Licence: https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+
+Restaurant chains
+-----------------
+Nutrition values of restaurant chains, as each chain publishes them on its official site; every record links to the page it was read on.
+No open licence. The database only holds such records when files were committed
+to sources/chains/, which this repository does not ship: name each chain whose
+values you publish, with a link to its site.
 
 Kratheos
 --------

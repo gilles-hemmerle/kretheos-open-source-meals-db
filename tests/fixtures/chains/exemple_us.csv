@@ -1,0 +1,2 @@
+chain,country,language,product_name,category,product_key,portion_size,portion_unit,is_drink,energy_kcal_per_100,protein_g_per_100,carbohydrate_g_per_100,sugars_g_per_100,fat_g_per_100,saturated_fat_g_per_100,fibre_g_per_100,salt_g_per_100,source_url,date_collected
+Chaîne Exemple,US,en,Test burger,Burgers,b-001,7,oz,no,250,13,22,4,13,5,2,1.2,https://example.org/us/test-burger,2026-10-11

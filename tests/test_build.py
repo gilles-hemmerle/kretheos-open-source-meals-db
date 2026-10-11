@@ -22,12 +22,21 @@ import pytest
 from builders import SWISS_VALUE_HEADERS
 from conftest import FileServer, make_repository, quiet
 
-from kratheos_food_data import cli, lookup, schema, sqlite_export
+from kratheos_food_data import cli, lookup, schema, sqlite_export, versions
 from kratheos_food_data.build import BuildOptions, Workspace, run_build
 from kratheos_food_data.kratheos import LayerError
 from kratheos_food_data.mirror import parse_overrides
 
-EXPECTED_RECORDS = {"usda": 10, "off": 7, "ciqual": 3, "swiss": 3, "cnf": 2, "cofid": 3}
+EXPECTED_RECORDS = {
+    "usda": 10,
+    "off": 7,
+    "ciqual": 3,
+    "swiss": 3,
+    "cnf": 2,
+    "cofid": 3,
+    "chain": 0,  # no file in sources/chains/: the source is there and empty
+}
+CHAIN_FIXTURES = Path(__file__).parent / "fixtures" / "chains"
 EXPECTED_FOODS = 26  # 16 generic foods, 7 barcodes, 3 products without a valid barcode
 
 
@@ -105,7 +114,9 @@ def test_build_holds_every_record_of_every_source(repository: Workspace) -> None
 
     # The originals are stored where the source list says, untouched.
     assert manifest["inputs"]["mode"] == "upstream"
-    assert all(entry["origin"] == "upstream" for entry in manifest["sources"])
+    downloaded = [entry for entry in manifest["sources"] if entry["id"] != "chain"]
+    assert all(entry["origin"] == "upstream" for entry in downloaded)
+    assert by_source["chain"]["origin"] == "mirror" and by_source["chain"]["files"] == []
     assert (repository.sources_dir / "ciqual" / "alim.xml").exists()
     assert (repository.mirror / "usda.branded_food_csv.zip").exists()
     assert (repository.mirror / "off.food.parquet").exists()
@@ -402,20 +413,42 @@ def test_kratheos_layer_and_temporary_source_line_then_back(repository: Workspac
     assert len(empty_layer) == repository.kratheos.stat().st_size
 
 
-def test_corrections_confirmations_and_translations_rules(repository: Workspace) -> None:
-    """Corrections replace values, sources stay available, names are never replaced."""
-    layer = sqlite3.connect(repository.kratheos)
+VERSION_INSERT = (
+    "INSERT INTO versions (version_id, food_id, basis, energy_kcal, protein_g, carbohydrate_g,"
+    " sugars_g, fat_g, saturated_fat_g, salt_g, serving_size, serving_unit, serving_text,"
+    " countries, updated_at) VALUES (?, ?, '100g', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+)
+
+
+def fill_layer_with_versions_and_votes(workspace: Workspace) -> None:
+    """Write users' versions, votes, translations and a product into the layer."""
+    layer = sqlite3.connect(workspace.kratheos)
+    layer.executemany(
+        VERSION_INSERT,
+        [
+            # Other values for a barcode two sources know, proposed for France.
+            ("kratheos:v:aaa", "gtin:3017620422003", 530, 6, 56, 55, 31, 11, 0.1)
+            + (15, "g", "15 g", '["fr"]', "2026-11-01"),
+            # Other values for a generic food, with too few votes to be served.
+            ("kratheos:v:bbb", "ciqual:13000", 48, 0.9, 9.5, 7, 0.4, 0.05, 0.01)
+            + (None, None, None, None, "2026-11-02"),
+            # Values that make no sense: kept, and flagged by the same checks.
+            ("kratheos:v:ddd", "ciqual:25999", 2510, 13, 25, 3, 11, 4, 1)
+            + (None, None, None, None, "2026-11-03"),
+            ("kratheos:v:ccc", "nothing:here", 100, 1, 1, 1, 1, 1, 1)
+            + (None, None, None, None, "2026-11-04"),
+        ],
+    )
     layer.executescript(
         """
-        INSERT INTO corrections (record_id, names, energy_kcal, carbohydrate_g, updated_at)
-            VALUES ('gtin:3017620422003', '{"fr": "Nutella (pot de 400 g)"}', 530, 56,
-                    '2026-11-01');
-        INSERT INTO corrections (record_id, energy_kcal, updated_at)
-            VALUES ('ciqual:25999', 2510, '2026-11-01');
-        INSERT INTO corrections (record_id, energy_kcal, updated_at)
-            VALUES ('off:does-not-exist', 100, '2026-11-01');
-        INSERT INTO confirmations VALUES ('ciqual:13000', 12, '2026-11-01');
-        INSERT INTO confirmations VALUES ('nothing:here', 3, '2026-11-01');
+        INSERT INTO votes VALUES ('kratheos:v:aaa', 'gtin:3017620422003', 4, '2026-11-05');
+        INSERT INTO votes VALUES ('off:3017620422003', 'gtin:3017620422003', 2, '2026-11-05');
+        INSERT INTO votes VALUES ('usda:branded:3017620422003', 'gtin:3017620422003', 1,
+                                  '2026-11-05');
+        INSERT INTO votes VALUES ('kratheos:v:bbb', 'ciqual:13000', 2, '2026-11-05');
+        INSERT INTO votes VALUES ('kratheos:v:ddd', 'ciqual:25999', 9, '2026-11-05');
+        INSERT INTO votes VALUES ('swiss:273', 'swiss:273', 7, '2026-11-05');
+        INSERT INTO votes VALUES ('nothing:voted', 'nothing:here', 3, '2026-11-05');
         INSERT INTO translations VALUES ('ciqual:13000', 'fr', 'Autre nom', 'machine',
                                          '2026-11-01');
         INSERT INTO translations VALUES ('ciqual:13000', 'it', 'Albicocca', 'machine',
@@ -431,46 +464,110 @@ def test_corrections_confirmations_and_translations_rules(repository: Workspace)
     )
     layer.commit()
     layer.close()
+
+
+def versions_of(workspace: Workspace, food_id: str) -> list[dict]:
+    """Read the versions of a food from the built database, in build order."""
+    database = sqlite3.connect(workspace.dist / "food.sqlite")
+    database.row_factory = sqlite3.Row
+    try:
+        rows = database.execute(
+            "SELECT v.* FROM versions AS v JOIN foods AS f ON f.pk = v.food_pk"
+            " WHERE f.id = ? ORDER BY v.position",
+            (food_id,),
+        ).fetchall()
+        return [
+            dict(row, countries=json.loads(row["countries"]) if row["countries"] else [])
+            for row in rows
+        ]
+    finally:
+        database.close()
+
+
+def test_versions_votes_and_translations_rules(repository: Workspace) -> None:
+    """Every version is kept, the most voted is served, names are never replaced."""
+    fill_layer_with_versions_and_votes(repository)
     manifest = build(repository)
     assert manifest["kratheos"]["statistics"] == {
         "products": 1,
         "products_with_valid_barcode": 1,
-        "corrections": 3,
-        "corrections_applied": 2,
-        "corrections_without_target": 1,
-        "confirmations": 2,
-        "confirmations_applied": 1,
-        "confirmations_without_target": 1,
+        "versions": 4,
+        "versions_applied": 3,
+        "versions_without_target": 1,
+        "votes": 7,
+        "votes_applied": 6,
+        "votes_without_target": 1,
         "translations": 4,
         "translations_applied": 2,
         "translations_ignored_name_already_given": 1,
         "translations_without_target": 1,
+        "user_version_votes": 3,
+        "foods_with_several_versions": 5,
+        "foods_served_from_a_user_version": 2,
         "products_dropped": {},
     }
 
+    # Two sources and a user's version: nothing is overwritten, the most voted is served.
+    listed = versions_of(repository, "gtin:3017620422003")
+    assert [(v["version_id"], v["origin"], v["votes"], v["served"]) for v in listed] == [
+        ("kratheos:v:aaa", "user", 4, 1),
+        ("off:3017620422003", "source", 2, 0),
+        ("usda:branded:3017620422003", "source", 1, 0),
+    ]
+    assert [(v["energy_kcal"], v["countries"]) for v in listed] == [
+        (530.0, ["FR"]),
+        (539.0, ["FR", "GB"]),
+        (541.0, ["US"]),
+    ]
     nutella = query(
         repository,
-        "SELECT name, energy_kcal, carbohydrate_g, fat_g, flags, plausible, updated_at, record_id"
-        " FROM foods WHERE id = 'gtin:3017620422003'",
+        "SELECT record_id, source, name, brand, energy_kcal, carbohydrate_g, serving_text,"
+        " countries, licence, updated_at, votes, versions_count, plausible, flags,"
+        " other_records FROM foods WHERE id = 'gtin:3017620422003'",
     )[0]
-    assert nutella[:4] == ("Nutella (pot de 400 g)", 530.0, 56.0, 30.9)
-    assert json.loads(nutella[4]) == [schema.FLAG_KRATHEOS_CORRECTED]
-    assert nutella[5:] == (1, "2026-11-01", "off:3017620422003")
-    kept = query(
-        repository,
-        "SELECT name, energy_kcal, carbohydrate_g, source FROM source_values"
-        " WHERE id = 'gtin:3017620422003'",
+    assert nutella == (
+        "kratheos:v:aaa",
+        "kratheos",
+        "Nutella",  # who the food is does not change with the votes
+        "Nutella, Ferrero",
+        530.0,
+        56.0,
+        "15 g",
+        '["FR"]',
+        "ODbL-1.0",
+        "2026-11-01",
+        4,
+        3,
+        1,
+        "[]",
+        '["usda:branded:3017620422003"]',
     )
-    assert kept == [("Nutella", 539.0, 57.5, "off")]  # the source's own values stay available
 
-    # A correction that makes no sense is applied, and flagged by the same checks.
+    # Below the threshold a user's version is kept, listed, and not served.
+    apricot = query(
+        repository,
+        "SELECT record_id, source, energy_kcal, votes, versions_count FROM foods"
+        " WHERE id = 'ciqual:13000'",
+    )
+    assert apricot == [("ciqual:13000", "ciqual", 45.9, 0, 2)]
+    assert [
+        (v["version_id"], v["votes"], v["served"]) for v in versions_of(repository, "ciqual:13000")
+    ] == [("kratheos:v:bbb", 2, 0), ("ciqual:13000", 0, 1)]
+
+    # A version that makes no sense is served when people vote for it, and flagged.
     hamburger = query(
-        repository, "SELECT energy_kcal, plausible, flags FROM foods WHERE id = 'ciqual:25999'"
+        repository,
+        "SELECT record_id, energy_kcal, plausible, flags FROM foods WHERE id = 'ciqual:25999'",
     )[0]
-    assert hamburger[:2] == (2510.0, 0)
-    assert schema.FLAG_ENERGY_OUT_OF_RANGE in json.loads(hamburger[2])
+    assert hamburger[:3] == ("kratheos:v:ddd", 2510.0, 0)
+    assert schema.FLAG_ENERGY_OUT_OF_RANGE in json.loads(hamburger[3])
 
-    assert query(repository, "SELECT confirmations FROM foods WHERE id = 'ciqual:13000'") == [(12,)]
+    # Votes for the only version of a food are kept on the food itself.
+    assert query(repository, "SELECT votes, versions_count FROM foods WHERE id = 'swiss:273'") == [
+        (7, 1)
+    ]
+    assert versions_of(repository, "swiss:273") == []
+
     names = query(
         repository,
         "SELECT f.id, n.lang, n.name, n.origin, n.kratheos_origin FROM names AS n"
@@ -483,27 +580,218 @@ def test_corrections_confirmations_and_translations_rules(repository: Workspace)
         ("ciqual:13000", "it", "Albicocca", "kratheos", "machine"),
         ("gtin:3017620422003", "de", "Nutella", "kratheos", "human"),
         ("gtin:3017620422003", "en", "Nutella hazelnut spread", "source", None),
-        ("gtin:3017620422003", "fr", "Nutella (pot de 400 g)", "kratheos", "correction"),
+        ("gtin:3017620422003", "fr", "Nutella", "source", None),
     ]
 
-    # A Kratheos product with a barcode competes for it like any source record.
+    # A product added in Kratheos under a barcode a source knows is one more
+    # version of that food: without votes the record of the source is served.
     cola = query(
         repository,
-        "SELECT record_id, source, other_records, source_count FROM foods"
-        " WHERE id = 'gtin:5449000000996'",
+        "SELECT record_id, source, name, other_records, source_count, votes, versions_count"
+        " FROM foods WHERE id = 'gtin:5449000000996'",
     )
-    assert cola == [("kratheos:cola-ch", "kratheos", '["off:5449000000996"]', 2)]
+    assert cola == [
+        ("off:5449000000996", "off", "Coca-Cola Original", '["kratheos:cola-ch"]', 2, 0, 2)
+    ]
+    assert [
+        (v["version_id"], v["origin"], v["served"])
+        for v in versions_of(repository, "gtin:5449000000996")
+    ] == [("kratheos:cola-ch", "user", 0), ("off:5449000000996", "source", 1)]
     assert query(repository, "SELECT count(*) FROM foods") == [(EXPECTED_FOODS,)]
+    assert query(repository, "SELECT value FROM meta WHERE key = 'user_version_votes'") == [("3",)]
+
+
+def test_served_version_is_the_same_in_the_build_and_in_python(repository: Workspace) -> None:
+    """The SQL of the build and `versions.choose_served` agree, whatever the threshold."""
+    fill_layer_with_versions_and_votes(repository)
+    layer = sqlite3.connect(repository.kratheos)
+    # A tie between a source and a user's version, and a product nobody else knows.
+    layer.execute("UPDATE votes SET votes = 4 WHERE version_id = 'off:3017620422003'")
+    layer.execute(
+        "INSERT INTO products (id, name, name_lang, basis, energy_kcal, protein_g,"
+        " carbohydrate_g, fat_g, countries, updated_at) VALUES ('plat', 'Plat du test', 'fr',"
+        " '100g', 150, 8, 12, 7, '[\"CH\"]', '2026-10-11')"
+    )
+    layer.execute(
+        VERSION_INSERT,
+        ("kratheos:v:eee", "kratheos:plat", 160, 8, 13, 2, 8, 2, 0.5)
+        + (None, None, None, '["CH"]', "2026-10-20"),
+    )
+    layer.commit()
+    layer.close()
+    for threshold in (1, 3, 5):
+        from_nothing(repository)
+        build(repository, user_version_votes=threshold)
+        database = sqlite3.connect(repository.dist / "food.sqlite")
+        priorities = dict(database.execute("SELECT id, priority FROM sources"))
+        several = [
+            row[0]
+            for row in database.execute("SELECT id FROM foods WHERE versions_count > 1 ORDER BY id")
+        ]
+        database.close()
+        assert priorities["usda"] == 1 and priorities["kratheos"] == 1000
+        assert len(several) == 6
+        for food_id in several:
+            listed = versions_of(repository, food_id)
+            for version in listed:
+                version["plausible"] = bool(version["plausible"])
+                version["has_macros"] = bool(version["has_macros"])
+            assert versions.ordered(listed, priorities) == listed, food_id
+            chosen = versions.choose_served(listed, None, threshold)
+            assert [v["version_id"] for v in listed if v["served"]] == [chosen["version_id"]]
+            record = query(repository, "SELECT record_id FROM foods WHERE id = ?", (food_id,))
+            assert record == [(chosen["version_id"],)], (food_id, threshold)
+    # With 5 votes required the user's version (4 votes) gives way to the source it ties with.
+    assert query(repository, "SELECT record_id FROM foods WHERE id = 'gtin:3017620422003'") == [
+        ("off:3017620422003",)
+    ]
+    # A food no source knows only has users' versions: the threshold does not apply, and
+    # without votes the most recent one is served.
+    assert query(repository, "SELECT record_id FROM foods WHERE id = 'kratheos:plat'") == [
+        ("kratheos:v:eee",)
+    ]
+
+
+def test_country_narrows_the_versions_considered() -> None:
+    """A person gets the version of their market when there is one."""
+    french = {"version_id": "off:1", "origin": "source", "votes": 0, "countries": ["FR", "GB"]}
+    american = {"version_id": "usda:1", "origin": "source", "votes": 2, "countries": ["US"]}
+    proposed = {"version_id": "kratheos:v:1", "origin": "user", "votes": 2, "countries": ["CH"]}
+    listed = [french, american, proposed]
+    assert versions.choose_served(listed) is american  # the most voted
+    assert versions.choose_served(listed, "fr") is french  # the only one of that market
+    assert versions.choose_served(listed, "US") is american
+    assert versions.choose_served(listed, "DE") is american  # nobody lists it: all of them
+    # Below the threshold a user's version is never served instead of a source,
+    # even to the only country that lists it.
+    assert versions.choose_served(listed, "CH") is american
+    assert versions.choose_served(listed, "CH", user_version_votes=2) is proposed
+    proposed["votes"] = 3
+    assert versions.choose_served(listed) is proposed
+    assert versions.choose_served(listed, "US") is american
+    american["votes"] = 3
+    assert versions.choose_served(listed) is american  # a tie: the order of the build
+    assert versions.listing_order(listed, french) == [french, american, proposed]
+    assert versions.choose_served([]) is None
+
+
+def test_versions_disagree_uses_the_tolerance_of_the_sources() -> None:
+    """Versions differ beyond the rounding of a label, or when their basis differs."""
+    base = {"basis": "100g", "has_macros": True, "energy_kcal": 539, "protein_g": 6.3}
+    base |= {"carbohydrate_g": 57.5, "fat_g": 30.9}
+    assert not versions.disagree([base])
+    assert not versions.disagree([base, dict(base, energy_kcal=545, fat_g=32.4)])
+    assert versions.disagree([base, dict(base, energy_kcal=480)])
+    assert versions.disagree([base, dict(base, protein_g=12)])
+    assert versions.disagree([base, dict(base, basis="100ml")])
+    assert not versions.disagree([base, dict(base, energy_kcal=10, has_macros=False)])
+
+
+def test_chain_files_become_products_without_barcode(repository: Workspace) -> None:
+    """The files of sources/chains/ are read as they are, and nothing without them."""
+    baseline = build(repository)
+    assert baseline["statistics"]["foods"]["foods"] == EXPECTED_FOODS
+    shutil.copytree(CHAIN_FIXTURES, repository.sources_dir / "chains")
+    manifest = build(repository)
+    chain = next(entry for entry in manifest["sources"] if entry["id"] == "chain")
+    assert [entry["stored_as"] for entry in chain["files"]] == [
+        "sources/chains/exemple_ch.csv",
+        "sources/chains/exemple_ch_de.csv",
+        "sources/chains/exemple_us.csv",
+    ]
+    assert chain["files"][0]["sha256"] == checksum(CHAIN_FIXTURES / "exemple_ch.csv")
+    assert chain["version"] == "3 files, collected up to 2026-10-12"
+    assert chain["adapter"] == {
+        "files": {"exemple_ch.csv": 6, "exemple_ch_de.csv": 1, "exemple_us.csv": 1},
+        "rows_in_files": 8,
+        "repeated_products_skipped": 1,
+        "products_identified_by_name": 1,
+        "rows_staged": 6,
+    }
+    assert chain["normalization"] == {"read": 6, "kept": 5, "dropped": {"no_energy": 1}}
+    foods = {
+        row[0]: row[1:]
+        for row in query(
+            repository,
+            "SELECT id, kind, barcode, name, name_lang, brand, category, basis, energy_kcal,"
+            " carbohydrate_g, carbohydrate_total_g, serving_size, serving_unit, is_drink,"
+            " countries, source_url, updated_at, plausible, licence FROM foods"
+            " WHERE source = 'chain'",
+        )
+    }
+    assert set(foods) == {
+        "chain:chaine-exemple:ch:b-001",
+        "chain:chaine-exemple:ch:frites-moyennes",  # the site gives no key: the name
+        "chain:chaine-exemple:ch:d-007",
+        "chain:chaine-exemple:ch:w-009",
+        "chain:chaine-exemple:us:b-001",
+    }
+    assert foods["chain:chaine-exemple:ch:b-001"] == (
+        "product",
+        None,
+        "Burger du test",
+        "fr",
+        "Chaîne Exemple",
+        "Burgers",
+        "100g",
+        250.0,
+        20.0,
+        None,
+        200.0,
+        "g",
+        0,
+        '["CH"]',
+        "https://example.org/ch/fr/burger-du-test",
+        "2026-10-11",
+        1,
+        "publisher-terms",
+    )
+    drink = foods["chain:chaine-exemple:ch:d-007"]
+    assert (drink[6], drink[10], drink[11], drink[12]) == ("100ml", 400.0, "ml", 1)
+    # A menu of the United States gives total carbohydrate: fibre is subtracted.
+    american = foods["chain:chaine-exemple:us:b-001"]
+    assert (american[8], american[9], american[10], american[11]) == (20.0, 22.0, None, None)
+    assert foods["chain:chaine-exemple:ch:w-009"][16] == 0  # 4 kcal for these macros
+    names = query(
+        repository,
+        "SELECT n.lang, n.name FROM names AS n JOIN foods AS f ON f.pk = n.food_pk"
+        " WHERE f.id = 'chain:chaine-exemple:ch:b-001' ORDER BY n.lang",
+    )
+    assert names == [("de", "Testburger"), ("fr", "Burger du test")]  # one file per language
+    database = repository.dist / "food.sqlite"
+    assert [food["id"] for food in lookup.find(database, "frites moy")] == [
+        "chain:chaine-exemple:ch:frites-moyennes"
+    ]
+    assert "chain:chaine-exemple:ch:b-001" in [
+        food["id"] for food in lookup.find(database, "chaine exemple")
+    ]
+    assert manifest["statistics"]["foods"]["foods"] == EXPECTED_FOODS + 5
 
 
 def test_layer_with_an_unknown_column_is_refused(repository: Workspace) -> None:
     """Nothing identifying a person can slip in: the layout is closed."""
     layer = sqlite3.connect(repository.kratheos)
-    layer.execute("ALTER TABLE confirmations ADD COLUMN user_id TEXT")
+    layer.execute("ALTER TABLE votes ADD COLUMN user_id TEXT")
     layer.commit()
     layer.close()
-    with pytest.raises(LayerError, match="confirmations"):
+    with pytest.raises(LayerError, match="votes"):
         build(repository)
+
+
+def test_layer_identifiers_cannot_be_mistaken(repository: Workspace) -> None:
+    """A product is never named like a version, nor a version like a record."""
+    layer = sqlite3.connect(repository.kratheos)
+    with pytest.raises(sqlite3.IntegrityError):
+        layer.execute(
+            "INSERT INTO products (id, name, name_lang, basis, updated_at)"
+            " VALUES ('v:1', 'x', 'fr', '100g', '2026-10-11')"
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        layer.execute(
+            "INSERT INTO versions (version_id, food_id, basis, energy_kcal, updated_at)"
+            " VALUES ('off:123', 'gtin:3017620422003', '100g', 100, '2026-10-11')"
+        )
+    layer.close()
 
 
 def test_command_line(

@@ -143,7 +143,6 @@ FLAG_INEXACT_VALUES = "inexact_values"
 FLAG_OBSOLETE = "obsolete"
 FLAG_BARCODE_INVALID = "barcode_invalid"
 FLAG_BARCODE_RESTRICTED = "barcode_restricted"
-FLAG_KRATHEOS_CORRECTED = "kratheos_corrected"
 
 # Flags raised by the quality checks. Any of them makes a record implausible.
 FLAG_VALUE_OUT_OF_RANGE = "value_out_of_range"
@@ -166,7 +165,6 @@ INFO_FLAGS: dict[str, str] = {
     FLAG_OBSOLETE: "The source marks the product as no longer sold.",
     FLAG_BARCODE_INVALID: "The source has a barcode that is not a valid GTIN; it was dropped.",
     FLAG_BARCODE_RESTRICTED: "The barcode is an in-store number, not unique across retailers.",
-    FLAG_KRATHEOS_CORRECTED: "Values were corrected in Kratheos (main database only).",
 }
 
 QUALITY_FLAGS: dict[str, str] = {

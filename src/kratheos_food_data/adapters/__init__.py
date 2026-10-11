@@ -14,7 +14,7 @@ from .base import AdapterContext, AdapterResult
 
 AdapterBuild = Callable[[Source, AdapterContext], AdapterResult]
 
-ADAPTER_MODULES = ("openfoodfacts", "usda_fdc", "ciqual", "swiss", "cnf", "cofid")
+ADAPTER_MODULES = ("openfoodfacts", "usda_fdc", "ciqual", "swiss", "cnf", "cofid", "chain")
 
 
 def get_adapter(name: str) -> AdapterBuild:

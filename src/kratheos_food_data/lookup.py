@@ -44,7 +44,8 @@ SHOWN_COLUMNS = (
     "serving_unit",
     "is_drink",
     "countries",
-    "confirmations",
+    "votes",
+    "versions_count",
     "has_macros",
     "plausible",
     "flags",
@@ -202,8 +203,10 @@ def format_records(records: list[dict]) -> str:
             details.append(f"serving {record['serving_size']:g} {record['serving_unit'] or ''}")
         if record.get("countries"):
             details.append("countries " + ",".join(record["countries"]))
-        if record.get("confirmations") is not None:
-            details.append(f"confirmed by {record['confirmations']}")
+        if record.get("votes"):
+            details.append(f"{record['votes']} votes")
+        if (record.get("versions_count") or 1) > 1:
+            details.append(f"{record['versions_count']} versions")
         lines.append("  " + "; ".join(details))
         names = ", ".join(
             f"{name['lang']}={name['name']}"

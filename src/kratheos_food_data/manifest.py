@@ -54,6 +54,7 @@ def source_description(source: Source, built: dict) -> dict:
         "homepage": source.homepage,
         "version": built.get("version") or source.version,
         "released": built.get("released") or source.released,
+        "priority": source.priority,
         "licence": source.licence,
         "licence_name": source.licence_name,
         "licence_url": source.licence_url,
@@ -76,7 +77,8 @@ def source_entry(source: Source, files: list[dict], built: dict, records: dict) 
     origins = {entry["origin"] for entry in files}
     if mirror.ORIGIN_OVERRIDE in origins:
         origin = mirror.ORIGIN_OVERRIDE
-    elif mirror.ORIGIN_MIRROR in origins:
+    elif mirror.ORIGIN_MIRROR in origins or source.directory:
+        # A source read from a directory of the repository has no upstream.
         origin = mirror.ORIGIN_MIRROR
     else:
         origin = mirror.ORIGIN_UPSTREAM
@@ -159,6 +161,7 @@ def quality_rules() -> dict:
         "agreement_energy_relative": aggregate.AGREE_ENERGY_RELATIVE,
         "agreement_macro_absolute_g": aggregate.AGREE_MACRO_ABSOLUTE_G,
         "agreement_macro_relative": aggregate.AGREE_MACRO_RELATIVE,
+        "user_version_votes_default": aggregate.DEFAULT_USER_VERSION_VOTES,
     }
 
 

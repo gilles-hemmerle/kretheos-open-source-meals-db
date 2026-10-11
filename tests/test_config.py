@@ -55,7 +55,12 @@ def test_real_source_list_is_complete(declared_sources: dict[str, Source]) -> No
     """Every enabled source of the repository states its licence and terms."""
     assert {"off", "usda", "ciqual", "swiss"} <= set(declared_sources)
     for source in declared_sources.values():
-        if source.enabled:
+        if source.enabled and source.directory:
+            # Not a published database: no page states terms for it as a whole.
+            assert source.id == "chain" and not source.files
+            assert source.attribution and source.licence and source.licence_name
+            assert callable(get_adapter(source.adapter))
+        elif source.enabled:
             assert source.terms_quote and source.terms_url and source.attribution
             assert source.licence and source.licence_url
             assert source.adapter in ADAPTER_MODULES
@@ -113,6 +118,45 @@ def test_enabled_source_needs_its_licence(tmp_path: Path) -> None:
     """An enabled source without the sentence allowing redistribution is refused."""
     with pytest.raises(ConfigError, match="terms_quote"):
         _load(tmp_path, VALID.replace('terms_quote = "You may redistribute."\n', ""))
+
+
+DIRECTORY = """
+[[source]]
+id = "local"
+name = "Local files"
+publisher = "Somebody"
+homepage = ""
+adapter = "chain"
+version = "files"
+kinds = ["product"]
+priority = 1
+licence = "publisher-terms"
+licence_name = "No open licence"
+attribution = "Local data"
+mirror = "git"
+directory = "local-files"
+enabled = true
+"""
+
+
+def test_directory_source_lists_no_file_and_names_one_folder(tmp_path: Path) -> None:
+    """A source read from a folder of sources/ needs no file list and no terms."""
+    (source,) = _load(tmp_path, DIRECTORY)
+    assert source.directory == "local-files" and source.storage == "local-files"
+    assert source.files == () and source.terms_quote == ""
+    (downloaded,) = _load(tmp_path, VALID)
+    assert downloaded.directory == "" and downloaded.storage == "demo"
+    with pytest.raises(ConfigError, match="one folder name"):
+        _load(tmp_path, DIRECTORY.replace('"local-files"', '"../elsewhere"'))
+    with pytest.raises(ConfigError, match="stored in git"):
+        _load(tmp_path, DIRECTORY.replace('mirror = "git"', 'mirror = "release"'))
+    with pytest.raises(ConfigError, match="attribution"):
+        _load(tmp_path, DIRECTORY.replace('attribution = "Local data"\n', ""))
+    with pytest.raises(ConfigError, match="one folder name"):
+        _load(
+            tmp_path,
+            DIRECTORY + '  [[source.files]]\n  name = "a.csv"\n  url = "https://example.org/a"\n',
+        )
 
 
 def test_disabled_source_needs_a_reason(tmp_path: Path) -> None:

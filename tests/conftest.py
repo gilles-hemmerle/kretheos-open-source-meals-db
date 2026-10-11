@@ -8,6 +8,7 @@ the real network.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import shutil
@@ -25,7 +26,7 @@ from builders import build_all
 
 from kratheos_food_data import barcode, download, kratheos
 from kratheos_food_data.adapters import AdapterContext
-from kratheos_food_data.build import Workspace
+from kratheos_food_data.build import BuildOptions, Workspace, run_build
 from kratheos_food_data.config import Source, load_sources
 
 REPOSITORY = Path(__file__).resolve().parent.parent
@@ -116,18 +117,17 @@ def _handler(server_state: FileServer) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-@pytest.fixture
-def file_server(tmp_path: Path) -> Iterator[FileServer]:
-    """Serve `tmp_path / "remote"` over HTTP for the duration of a test.
+@contextlib.contextmanager
+def serving(root: Path) -> Iterator[FileServer]:
+    """Serve a directory over HTTP on the loopback interface.
 
     Args:
-        tmp_path: Temporary directory of the test.
+        root: Directory to serve, created when missing.
 
     Yields:
         The running server.
     """
-    root = tmp_path / "remote"
-    root.mkdir()
+    root.mkdir(parents=True, exist_ok=True)
     state = FileServer(root=root, url="")
     server = ThreadingHTTPServer(("127.0.0.1", 0), _handler(state))
     state.url = f"http://127.0.0.1:{server.server_address[1]}"
@@ -139,6 +139,20 @@ def file_server(tmp_path: Path) -> Iterator[FileServer]:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+@pytest.fixture
+def file_server(tmp_path: Path) -> Iterator[FileServer]:
+    """Serve `tmp_path / "remote"` over HTTP for the duration of a test.
+
+    Args:
+        tmp_path: Temporary directory of the test.
+
+    Yields:
+        The running server.
+    """
+    with serving(tmp_path / "remote") as state:
+        yield state
 
 
 @pytest.fixture(autouse=True)
@@ -296,3 +310,30 @@ def write_test_source_list(path: Path, base_url: str) -> None:
             lines.append(f"url = {json.dumps(f'{base_url}/{source["id"]}/{entry["name"]}')}")
         lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+@pytest.fixture(scope="session")
+def built_repository(
+    tmp_path_factory: pytest.TempPathFactory, miniature_sources: Path
+) -> Workspace:
+    """Build the miniature database once for the tests of the service.
+
+    The repository holds the stored originals of every source and the chain
+    fixtures, so that it can be rebuilt without a publisher. Tests must not
+    change it: they copy what they need.
+
+    Args:
+        tmp_path_factory: The pytest temporary directory factory.
+        miniature_sources: Directory of the miniature source files.
+
+    Returns:
+        The workspace of the built repository.
+    """
+    base = tmp_path_factory.mktemp("built")
+    with serving(base / "remote") as server:
+        workspace = make_repository(base / "repository", miniature_sources, server)
+        shutil.copytree(
+            REPOSITORY / "tests" / "fixtures" / "chains", workspace.sources_dir / "chains"
+        )
+        run_build(workspace, BuildOptions(), log=quiet)
+    return workspace

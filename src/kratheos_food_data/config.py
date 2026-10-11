@@ -24,6 +24,10 @@ REQUIRED_WHEN_ENABLED = (
     "attribution",
     "mirror",
 )
+# A source read from a directory of the repository is not a published
+# database: nobody's page states terms for it as a whole. Whoever commits a
+# file there decides, file by file, that it may be published.
+NOT_REQUIRED_FOR_A_DIRECTORY = ("licence_url", "terms_url", "terms_quote", "terms_checked")
 KINDS = {"generic", "product"}
 MIRROR_GIT = "git"
 MIRROR_RELEASE = "release"
@@ -78,6 +82,9 @@ class Source:
         mirror: Where its files are stored: git or release.
         country: Country whose foods its generic table describes, if any.
         files: Files to download.
+        directory: Directory of `sources/` whose files are the source, for a
+            source that is not downloaded: whatever the directory holds is
+            read, and the source is empty when it holds nothing.
     """
 
     id: str
@@ -102,6 +109,12 @@ class Source:
     mirror: str
     country: str
     files: tuple[SourceFile, ...]
+    directory: str = ""
+
+    @property
+    def storage(self) -> str:
+        """Return the directory of `sources/` holding the files of the source."""
+        return self.directory or self.id
 
     def file(self, name: str) -> SourceFile:
         """Return the declared file with the given name.
@@ -169,6 +182,7 @@ def _parse_source(raw: dict) -> Source:
             mirror=raw.get("mirror", ""),
             country=str(raw.get("country", "")).upper(),
             files=files,
+            directory=str(raw.get("directory", "")),
         )
     except KeyError as error:
         raise ConfigError(f"source {source_id}: missing field {error}") from error
@@ -176,11 +190,24 @@ def _parse_source(raw: dict) -> Source:
         raise ConfigError(f"source {source_id}: kinds must be among {sorted(KINDS)}")
     if source.country and not (len(source.country) == 2 and source.country.isalpha()):
         raise ConfigError(f"source {source_id}: country must be an ISO 3166-1 alpha-2 code")
+    if source.directory:
+        name = source.directory
+        if name in (".", "..") or "/" in name or "\\" in name or source.files:
+            raise ConfigError(
+                f"source {source_id}: directory must be one folder name, and lists no file"
+            )
+        if source.mirror != MIRROR_GIT:
+            raise ConfigError(f"source {source_id}: a directory source is stored in git")
     if source.enabled:
-        missing = [name for name in REQUIRED_WHEN_ENABLED if not getattr(source, name)]
+        required = [
+            name
+            for name in REQUIRED_WHEN_ENABLED
+            if not (source.directory and name in NOT_REQUIRED_FOR_A_DIRECTORY)
+        ]
+        missing = [name for name in required if not getattr(source, name)]
         if missing:
             raise ConfigError(f"source {source_id} is enabled but lacks: {', '.join(missing)}")
-        if not source.files:
+        if not source.files and not source.directory:
             raise ConfigError(f"source {source_id} is enabled but lists no file")
         if source.mirror not in MIRROR_KINDS:
             raise ConfigError(f"source {source_id}: mirror must be among {sorted(MIRROR_KINDS)}")

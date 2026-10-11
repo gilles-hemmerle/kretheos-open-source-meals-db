@@ -5,10 +5,11 @@ Layout of the file:
 * `foods`: one row per food, with the columns of the common schema. `id` is
   the public identifier, the only one to keep outside the file: for a food
   with a barcode it is `gtin:<barcode>`, for any other food the identifier of
-  its source record. `record_id` is the source record behind the row.
+  its source record. `record_id` is the version behind the values of the
+  row: the one served when no country is asked for.
 * `names`: every name of every food, one row per language, with its origin:
   `source` when the source of the record gives it, `kratheos` when Kratheos
-  added it (`kratheos_origin` then says `machine`, `human` or `correction`).
+  added it (`kratheos_origin` then says `machine` or `human`).
 * `foods_fts`: full-text index (FTS5) over the names of a food in every
   language it has, and its brand. Diacritics are ignored and prefixes of two
   and three letters are indexed, for search-as-you-type.
@@ -18,8 +19,10 @@ Layout of the file:
   is of the person's country, is one index lookup. `countries` counts them.
 * `display_names`: view applying the rule for the name to show (the person's
   language, else English, else the main name of the record).
-* `source_values`: the foods a Kratheos correction changed, as their source
-  gives them.
+* `versions`: every version of the values of the foods that have more than
+  one (the records of the sources sharing a barcode, the products added in
+  Kratheos, the versions proposed by users), with its votes, its position in
+  the order of the build and whether it is the one in `foods`.
 * `sources`: the sources, with their version, licence and attribution.
 * `meta`: version of the layout, licence, helper queries.
 
@@ -42,7 +45,7 @@ import duckdb
 from . import __version__
 from .names import DISPLAY_NAME_SQL, DISPLAY_NAMES_VIEW_SQL
 
-LAYOUT_VERSION = 1
+LAYOUT_VERSION = 2
 BATCH_ROWS = 50_000
 FTS_TOKENIZER = "unicode61 remove_diacritics 2"
 FTS_PREFIXES = "2 3"
@@ -77,7 +80,7 @@ FOOD_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("is_drink", "INTEGER", "CAST(is_drink AS INTEGER)"),
     ("countries", "TEXT", "CAST(to_json(countries) AS VARCHAR)"),
     ("popularity", "INTEGER", "popularity"),
-    ("confirmations", "INTEGER", "confirmations"),
+    ("votes", "INTEGER NOT NULL", "votes"),
     ("has_macros", "INTEGER NOT NULL", "CAST(has_macros AS INTEGER)"),
     ("plausible", "INTEGER NOT NULL", "CAST(plausible AS INTEGER)"),
     ("flags", "TEXT NOT NULL", "CAST(to_json(flags) AS VARCHAR)"),
@@ -88,6 +91,41 @@ FOOD_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("sources", "TEXT", "CAST(to_json(sources) AS VARCHAR)"),
     ("other_records", "TEXT", "CAST(to_json(other_records) AS VARCHAR)"),
     ("sources_agree", "INTEGER", "CAST(sources_agree AS INTEGER)"),
+    ("versions_count", "INTEGER NOT NULL", "versions_count"),
+)
+
+# Column of `versions` -> (SQLite declaration, DuckDB expression giving it).
+VERSION_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("food_pk", "INTEGER NOT NULL REFERENCES foods (pk)", "f.food_pk"),
+    ("position", "INTEGER NOT NULL", "v.position"),
+    ("version_id", "TEXT NOT NULL", "v.version_id"),
+    ("origin", "TEXT NOT NULL CHECK (origin IN ('source', 'user'))", "v.origin"),
+    ("votes", "INTEGER NOT NULL", "v.votes"),
+    ("served", "INTEGER NOT NULL", "CAST(v.served AS INTEGER)"),
+    ("source", "TEXT NOT NULL", "v.source"),
+    ("source_dataset", "TEXT", "v.source_dataset"),
+    ("source_record_id", "TEXT NOT NULL", "v.source_record_id"),
+    ("basis", "TEXT NOT NULL", "v.basis"),
+    ("energy_kcal", "REAL", "v.energy_kcal"),
+    ("protein_g", "REAL", "v.protein_g"),
+    ("carbohydrate_g", "REAL", "v.carbohydrate_g"),
+    ("carbohydrate_total_g", "REAL", "v.carbohydrate_total_g"),
+    ("sugars_g", "REAL", "v.sugars_g"),
+    ("fat_g", "REAL", "v.fat_g"),
+    ("saturated_fat_g", "REAL", "v.saturated_fat_g"),
+    ("fiber_g", "REAL", "v.fiber_g"),
+    ("salt_g", "REAL", "v.salt_g"),
+    ("alcohol_g", "REAL", "v.alcohol_g"),
+    ("serving_size", "REAL", "v.serving_size"),
+    ("serving_unit", "TEXT", "v.serving_unit"),
+    ("serving_text", "TEXT", "v.serving_text"),
+    ("countries", "TEXT", "CAST(to_json(v.countries) AS VARCHAR)"),
+    ("has_macros", "INTEGER NOT NULL", "CAST(v.has_macros AS INTEGER)"),
+    ("plausible", "INTEGER NOT NULL", "CAST(v.plausible AS INTEGER)"),
+    ("flags", "TEXT NOT NULL", "CAST(to_json(v.flags) AS VARCHAR)"),
+    ("licence", "TEXT NOT NULL", "v.licence"),
+    ("source_url", "TEXT", "v.source_url"),
+    ("updated_at", "TEXT", "CAST(v.updated_at AS VARCHAR)"),
 )
 
 # Parameters: :query (an FTS5 expression) and :country (ISO 3166-1 alpha-2).
@@ -118,9 +156,7 @@ def _schema_sql() -> str:
         The SQL script.
     """
     food_columns = ",\n    ".join(f"{name} {kind}" for name, kind, _ in FOOD_COLUMNS)
-    value_columns = ",\n    ".join(
-        f"{name} {kind}" for name, kind, _ in FOOD_COLUMNS if name != "confirmations"
-    )
+    version_columns = ",\n    ".join(f"{name} {kind}" for name, kind, _ in VERSION_COLUMNS)
     return f"""
 CREATE TABLE meta (
     key TEXT PRIMARY KEY,
@@ -138,7 +174,8 @@ CREATE TABLE sources (
     licence_name TEXT,
     licence_url TEXT,
     attribution TEXT NOT NULL,
-    foods INTEGER NOT NULL
+    foods INTEGER NOT NULL,
+    priority INTEGER NOT NULL
 ) WITHOUT ROWID;
 
 CREATE TABLE foods (
@@ -151,7 +188,7 @@ CREATE TABLE names (
     lang TEXT NOT NULL,
     name TEXT NOT NULL,
     origin TEXT NOT NULL CHECK (origin IN ('source', 'kratheos')),
-    kratheos_origin TEXT CHECK (kratheos_origin IN ('machine', 'human', 'correction')),
+    kratheos_origin TEXT CHECK (kratheos_origin IN ('machine', 'human')),
     PRIMARY KEY (food_pk, lang)
 ) WITHOUT ROWID;
 
@@ -171,9 +208,9 @@ CREATE TABLE languages (
     names INTEGER NOT NULL
 ) WITHOUT ROWID;
 
-CREATE TABLE source_values (
-    {value_columns},
-    PRIMARY KEY (id)
+CREATE TABLE versions (
+    {version_columns},
+    PRIMARY KEY (food_pk, position)
 ) WITHOUT ROWID;
 
 CREATE VIRTUAL TABLE foods_fts USING fts5(
@@ -207,17 +244,23 @@ def _copy(
 
 
 def write_food_database(
-    con: duckdb.DuckDBPyConnection, path: Path, sources: list[dict], licence: dict
+    con: duckdb.DuckDBPyConnection,
+    path: Path,
+    sources: list[dict],
+    licence: dict,
+    user_version_votes: int,
 ) -> int:
     """Write `food.sqlite` from the tables created by `aggregate.build_foods`.
 
     Args:
-        con: DuckDB connection holding `foods`, `food_names`, `source_values`.
+        con: DuckDB connection holding `foods`, `food_names`, `food_versions`.
         path: Where to write the database.
         sources: One description per source present in the foods: id, name,
-            publisher, homepage, version, released, licence, licence_name,
-            licence_url, attribution.
+            publisher, homepage, version, released, priority, licence,
+            licence_name, licence_url, attribution.
         licence: Licence of the database: id, name, url, notice.
+        user_version_votes: Votes a version coming from a user needed to be
+            served instead of a record of a source, recorded in `meta`.
 
     Returns:
         The number of foods written.
@@ -272,18 +315,17 @@ def write_food_database(
             """,
             "INSERT INTO foods_fts (rowid, names, brand) VALUES (?, ?, ?)",
         )
-        value_names = [name for name in names if name != "confirmations"]
-        value_expressions = ", ".join(
-            f"{expression} AS {name}"
-            for name, _, expression in FOOD_COLUMNS
-            if name != "confirmations"
+        version_names = [name for name, _, _ in VERSION_COLUMNS]
+        version_expressions = ", ".join(
+            f"{expression} AS {name}" for name, _, expression in VERSION_COLUMNS
         )
         _copy(
             con,
             database,
-            f"SELECT {value_expressions} FROM source_values ORDER BY id",
-            f"INSERT INTO source_values ({', '.join(value_names)})"
-            f" VALUES ({', '.join('?' for _ in value_names)})",
+            f"SELECT {version_expressions} FROM food_versions AS v"
+            " JOIN foods AS f ON f.id = v.food_id ORDER BY f.food_pk, v.position",
+            f"INSERT INTO versions ({', '.join(version_names)})"
+            f" VALUES ({', '.join('?' for _ in version_names)})",
         )
         _copy(
             con,
@@ -301,7 +343,7 @@ def write_food_database(
         )
         counts = dict(database.execute("SELECT source, count(*) FROM foods GROUP BY source"))
         database.executemany(
-            "INSERT INTO sources VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO sources VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     source["id"],
@@ -315,6 +357,7 @@ def write_food_database(
                     source["licence_url"],
                     source["attribution"],
                     counts.get(source["id"], 0),
+                    source["priority"],
                 )
                 for source in sorted(sources, key=lambda item: item["id"])
             ],
@@ -330,12 +373,14 @@ def write_food_database(
                 ("licence_notice", licence["notice"]),
                 ("display_name_query", DISPLAY_NAME_SQL),
                 ("search_query", SEARCH_SQL),
+                ("user_version_votes", str(int(user_version_votes))),
             ],
         )
         database.execute("CREATE UNIQUE INDEX foods_id ON foods (id)")
         database.execute(
             "CREATE UNIQUE INDEX foods_barcode ON foods (barcode) WHERE barcode IS NOT NULL"
         )
+        database.execute("CREATE INDEX versions_id ON versions (version_id)")
         database.execute("COMMIT")
         database.execute("INSERT INTO foods_fts (foods_fts) VALUES ('optimize')")
         database.execute("ANALYZE")

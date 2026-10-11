@@ -21,22 +21,36 @@ the sources as they are, and nothing from Kratheos.
 
 Step 2, the main database (`food.sqlite`). Its `foods` are the generic foods,
 one row per barcode and the products that have no valid barcode, after the
-Kratheos layer was applied in this order:
+Kratheos layer was applied.
 
-1. the products added in Kratheos join the records (source `kratheos`); one
-   with a barcode competes for that barcode under the rule above, Kratheos
-   coming last in the fixed source order;
-2. corrections replace the values of the food they name; the values of the
-   source are kept aside, with their source (`source_values`);
-3. confirmation counts are attached;
-4. translations give a food the names it lacks. A translation never replaces
-   a name the food already has; every name records where it comes from.
+A food can have several versions of its values: one per record of a source
+that knows it (the records sharing its barcode), the products added in
+Kratheos under that barcode, and the versions proposed by users. Nothing is
+averaged and nothing is overwritten: every version is kept, with the number
+of people who voted for it, and one of them is served.
+
+* Who the food is (its names, brand, category, kind, barcode) comes from one
+  record, chosen by the rule above among the records of the sources; a
+  product added in Kratheos only gives them when no source knows the barcode.
+* Whose values are served: the version with the most votes, except that a
+  version coming from a user (a product added in Kratheos, a version
+  proposed by a user) needs a minimum number of votes to be served instead
+  of a record of a source. A tie, or no vote at all, falls back to the rule
+  above: plausible values, complete macros, most recent, fixed source order.
+  With an empty layer this is the preferred record, as before.
+* Translations give a food the names it lacks. A translation never replaces
+  a name the food already has; every name records where it comes from.
+
+The row of a food in `foods` holds the values served when no country is
+asked for; the table `versions` holds every version of the foods that have
+more than one. A service that knows the country of a person applies the same
+rule to the versions listing that country (`versions.choose_served`).
 
 Identifiers. A food that has a barcode is identified by the barcode itself,
-`gtin:<canonical barcode>`, whichever source is preferred at the time; the
-record of the source behind it keeps its own identifier (`record_id`). Every
-other food is identified by its source record, `<source>:<id in the source>`.
-No identifier depends on a counter, a row number or the order of processing.
+`gtin:<canonical barcode>`, whichever version is served; the record behind
+the values keeps its own identifier (`record_id`). Every other food is
+identified by its source record, `<source>:<id in the source>`. No identifier
+depends on a counter, a row number or the order of processing.
 """
 
 from __future__ import annotations
@@ -46,35 +60,60 @@ from pathlib import Path
 
 import duckdb
 
-from . import schema
+from . import kratheos, schema
 from .config import Source
-from .kratheos import VALUE_COLUMNS
-from .normalize import has_macros_sql, quality_flag_cases, quality_list_sql
+from .normalize import VALUE_DECIMALS, has_macros_sql, quality_flag_cases, quality_list_sql
+from .versions import (
+    AGREE_ENERGY_ABSOLUTE_KCAL,
+    AGREE_ENERGY_RELATIVE,
+    AGREE_MACRO_ABSOLUTE_G,
+    AGREE_MACRO_RELATIVE,
+    COMPARED_VALUES,
+    DEFAULT_USER_VERSION_VOTES,
+    ORIGIN_SOURCE,
+    ORIGIN_USER,
+)
 
 GENERIC_NAME = "generic_foods"
 PRODUCTS_NAME = "products"
 BY_BARCODE_NAME = "products_by_barcode"
 PRODUCT_ID_PREFIX = "gtin:"
-AGREE_ENERGY_ABSOLUTE_KCAL = 10.0
-AGREE_ENERGY_RELATIVE = 0.10
-AGREE_MACRO_ABSOLUTE_G = 2.0
-AGREE_MACRO_RELATIVE = 0.20
-COMPARED_VALUES = ("energy_kcal", "protein_g", "carbohydrate_g", "fat_g")
 PREFERENCE_ORDER = (
     "p.plausible DESC, p.has_macros DESC, p.updated_at DESC NULLS LAST, o.priority ASC, p.id ASC"
 )
-# Informational flag -> corrected column that makes it obsolete.
-DERIVATION_FLAGS = {
-    schema.FLAG_ENERGY_FROM_KJ: "energy_kcal",
-    schema.FLAG_SALT_FROM_SODIUM: "salt_g",
-    schema.FLAG_ALCOHOL_FROM_ABV: "alcohol_g",
-    schema.FLAG_BASIS_ASSUMED: "basis",
-    schema.FLAG_CARBOHYDRATE_FIBER_SUBTRACTED: "carbohydrate_g",
-    schema.FLAG_CARBOHYDRATE_INCLUDES_FIBER: "carbohydrate_g",
-}
+# For the main database, who a food is comes from a record of a source when
+# one knows the barcode: a product added in Kratheos comes after them.
+SOURCES_FIRST_ORDER = f"(p.source = '{kratheos.SOURCE_ID}') ASC, {PREFERENCE_ORDER}"
 NAME_ORIGIN_SOURCE = "source"
 NAME_ORIGIN_KRATHEOS = "kratheos"
-NAME_FROM_CORRECTION = "correction"
+# Columns of a food that belong to the version served; the others say who the
+# food is and never change with the votes.
+VERSION_COLUMNS = (
+    "source",
+    "source_dataset",
+    "source_record_id",
+    "basis",
+    "energy_kcal",
+    "protein_g",
+    "carbohydrate_g",
+    "carbohydrate_total_g",
+    "sugars_g",
+    "fat_g",
+    "saturated_fat_g",
+    "fiber_g",
+    "salt_g",
+    "alcohol_g",
+    "serving_size",
+    "serving_unit",
+    "serving_text",
+    "countries",
+    "has_macros",
+    "plausible",
+    "flags",
+    "licence",
+    "source_url",
+    "updated_at",
+)
 
 
 @dataclass(frozen=True)
@@ -129,7 +168,9 @@ def _agreement_sql(name: str, absolute: float, relative: float) -> str:
     return f"(max_{name} - min_{name} <= greatest({absolute}, {relative} * max_{name}))"
 
 
-def select_by_barcode(con: duckdb.DuckDBPyConnection, table: str, relation: str) -> None:
+def select_by_barcode(
+    con: duckdb.DuckDBPyConnection, table: str, relation: str, order: str = PREFERENCE_ORDER
+) -> None:
     """Create the table of the preferred record of each barcode.
 
     The table has the output columns of the preferred record, `product_id`
@@ -140,6 +181,8 @@ def select_by_barcode(con: duckdb.DuckDBPyConnection, table: str, relation: str)
         con: DuckDB connection; the table `source_order` must exist.
         table: Name of the table to create.
         relation: Table or view holding the candidate records.
+        order: ORDER BY clause ranking the records of a barcode, over the
+            aliases `p` (the record) and `o` (the order of its source).
     """
     spread = " AND ".join(
         _agreement_sql(name, AGREE_ENERGY_ABSOLUTE_KCAL, AGREE_ENERGY_RELATIVE)
@@ -166,8 +209,8 @@ def select_by_barcode(con: duckdb.DuckDBPyConnection, table: str, relation: str)
             p.has_macros,
             p.basis,
             {compared_columns},
-            row_number() OVER (PARTITION BY p.barcode ORDER BY {PREFERENCE_ORDER}) AS position,
-            row_number() OVER (PARTITION BY p.barcode, p.source ORDER BY {PREFERENCE_ORDER})
+            row_number() OVER (PARTITION BY p.barcode ORDER BY {order}) AS position,
+            row_number() OVER (PARTITION BY p.barcode, p.source ORDER BY {order})
                 AS position_in_source
         FROM {relation} AS p
         JOIN source_order AS o ON o.source = p.source
@@ -334,91 +377,148 @@ def write_source_outputs(
     return written
 
 
-def _corrected_select() -> str:
-    """Build the SELECT giving the corrected version of the corrected foods.
+def _user_versions_select() -> str:
+    """Build the SELECT turning the versions proposed by users into versions.
 
-    Each corrected value replaces the value of the food; the quality checks
-    are run again on the result, and the flags that described how a replaced
-    value had been obtained are dropped.
+    A version is kept when the food it names exists. Its values are rounded
+    like those of a source and go through the same quality checks.
 
     Returns:
-        A SELECT over `foods_base` joined to `kratheos_corrections`, with the
-        columns of `foods_base`.
+        A SELECT over `kratheos_versions` joined to `foods_base`, with the
+        column `food_id`, `version_id` and the columns of `VERSION_COLUMNS`.
     """
-    special = ("is_drink", "serving_unit", "basis")
-    plain = [name for name, _ in VALUE_COLUMNS if name not in special]
-    overlay = ",\n            ".join(f"coalesce(c.{name}, f.{name}) AS {name}" for name in plain)
-    stale = " OR ".join(
-        f"(flag = '{flag}' AND c.{column} IS NOT NULL)" for flag, column in DERIVATION_FLAGS.items()
+    decimals = VALUE_DECIMALS
+    nutrients = ",\n            ".join(
+        f"round(v.{name}, {decimals}) AS {name}" for name, _ in kratheos.NUTRIENT_COLUMNS
     )
     quality = "[flag FOR flag IN [" + ", ".join(quality_flag_cases()) + "] IF flag IS NOT NULL]"
-    passthrough = (
-        "id",
-        "record_id",
-        "source",
-        "source_dataset",
-        "source_record_id",
-        "kind",
-        "barcode",
-        "name_lang",
-        "countries",
-        "popularity",
-        "licence",
-        "source_url",
-        "source_count",
-        "sources",
-        "other_records",
-        "sources_agree",
-    )
+    prefix = len(kratheos.SOURCE_ID) + 2
     return f"""
-    WITH overlaid AS (
+    WITH staged AS (
         SELECT
-            {", ".join("f." + name for name in passthrough)},
-            CASE WHEN c.names IS NULL THEN f.names ELSE map_concat(f.names, c.names) END AS names,
-            {overlay},
-            CASE WHEN c.carbohydrate_g IS NULL THEN f.carbohydrate_total_g END
-                AS carbohydrate_total_g,
-            coalesce(c.basis, f.basis) AS basis,
-            coalesce(c.serving_unit, f.serving_unit) AS serving_unit,
-            coalesce(CAST(c.is_drink AS BOOLEAN), f.is_drink) AS is_drink,
-            coalesce(c.updated_at, f.updated_at) AS updated_at,
+            v.food_id,
+            v.version_id,
+            '{kratheos.SOURCE_ID}' AS source,
+            CAST(NULL AS VARCHAR) AS source_dataset,
+            substr(v.version_id, {prefix}) AS source_record_id,
+            v.basis,
+            {nutrients},
+            CAST(NULL AS DOUBLE) AS carbohydrate_total_g,
             CAST(NULL AS DOUBLE) AS polyols_g,
-            [flag FOR flag IN f.flags
-             IF NOT list_contains({quality_list_sql()}, flag) AND NOT ({stale})] AS kept_flags
-        FROM foods_base AS f
-        JOIN kratheos_corrections AS c ON c.record_id = f.id
+            round(v.serving_size, {decimals}) AS serving_size,
+            v.serving_unit,
+            nullif(trim(v.serving_text), '') AS serving_text,
+            CASE WHEN len(v.countries) > 0
+                 THEN list_sort(list_distinct([upper(code) FOR code IN v.countries]))
+            END AS countries,
+            '{kratheos.LICENCE}' AS licence,
+            CAST(NULL AS VARCHAR) AS source_url,
+            v.updated_at
+        FROM kratheos_versions AS v
+        JOIN foods_base AS f ON f.id = v.food_id
     ),
     checked AS (
-        SELECT *, {has_macros_sql()} AS has_macros FROM overlaid
+        SELECT *, {has_macros_sql()} AS has_macros FROM staged
     ),
     flagged AS (
-        SELECT
-            *,
-            list_concat(kept_flags, {quality}, ['{schema.FLAG_KRATHEOS_CORRECTED}']) AS new_flags
-        FROM checked
+        SELECT *, {quality} AS flags FROM checked
     )
     SELECT
-        * EXCLUDE (polyols_g, kept_flags, new_flags),
-        trim(map_extract(names, name_lang)[1]) AS name,
-        new_flags AS flags,
-        NOT list_has_any(new_flags, {quality_list_sql()}) AS plausible
+        * EXCLUDE (polyols_g),
+        NOT list_has_any(flags, {quality_list_sql()}) AS plausible
     FROM flagged
     """
 
 
-def build_foods(con: duckdb.DuckDBPyConnection, kratheos_records: Path | None) -> dict:
+def _food_versions_select(relation: str, user_version_votes: int) -> str:
+    """Build the SELECT listing every version of the foods that have several.
+
+    The versions of a food are its own record, the other records sharing its
+    barcode and the versions proposed by users. Each gets its votes, its
+    position in the order of the build, and whether it is the one served
+    when no country is asked for.
+
+    Args:
+        relation: Table or view holding the records of every source.
+        user_version_votes: Votes a version coming from a user needs to be
+            served instead of a record of a source.
+
+    Returns:
+        A SELECT with `food_id`, `version_id`, `origin`, `votes`, `position`,
+        `served` and the columns of `VERSION_COLUMNS`.
+    """
+    own = ", ".join(f"f.{name}" for name in VERSION_COLUMNS)
+    other = ", ".join(f"r.{name}" for name in VERSION_COLUMNS)
+    eligible = (
+        f"(origin = '{ORIGIN_SOURCE}' OR votes >= {int(user_version_votes)} OR NOT has_source)"
+    )
+    return f"""
+    WITH several AS (
+        SELECT id FROM foods_base WHERE len(other_records) > 0
+        UNION
+        SELECT food_id FROM user_versions
+    ),
+    listed AS (
+        SELECT f.id AS food_id, f.record_id AS version_id, {own}
+        FROM foods_base AS f
+        WHERE f.id IN (SELECT id FROM several)
+        UNION ALL BY NAME
+        SELECT x.food_id, r.id AS version_id, {other}
+        FROM (
+            SELECT id AS food_id, unnest(other_records) AS record_id
+            FROM foods_base WHERE len(other_records) > 0
+        ) AS x
+        JOIN {relation} AS r ON r.id = x.record_id
+        UNION ALL BY NAME
+        SELECT * FROM user_versions
+    ),
+    voted AS (
+        SELECT
+            p.*,
+            CASE WHEN p.source = '{kratheos.SOURCE_ID}' THEN '{ORIGIN_USER}'
+                 ELSE '{ORIGIN_SOURCE}' END AS origin,
+            coalesce(k.votes, 0) AS votes,
+            row_number() OVER (
+                PARTITION BY p.food_id
+                ORDER BY p.plausible DESC, p.has_macros DESC, p.updated_at DESC NULLS LAST,
+                         o.priority ASC, p.version_id ASC
+            ) AS position
+        FROM listed AS p
+        JOIN source_order AS o ON o.source = p.source
+        LEFT JOIN kratheos_votes AS k ON k.version_id = p.version_id
+    ),
+    judged AS (
+        SELECT *, bool_or(origin = '{ORIGIN_SOURCE}') OVER (PARTITION BY food_id) AS has_source
+        FROM voted
+    )
+    SELECT
+        * EXCLUDE (has_source),
+        row_number() OVER (
+            PARTITION BY food_id ORDER BY {eligible} DESC, votes DESC, position ASC
+        ) = 1 AS served
+    FROM judged
+    """
+
+
+def build_foods(
+    con: duckdb.DuckDBPyConnection,
+    kratheos_records: Path | None,
+    user_version_votes: int = DEFAULT_USER_VERSION_VOTES,
+) -> dict:
     """Create the tables of the main database, Kratheos layer applied.
 
     Creates `foods` (one row per food, with `food_pk`, a number used only to
     link the tables inside the SQLite file), `food_names` (every name of
-    every food, with its origin) and `source_values` (the foods as their
-    source gives them, for those a correction changed).
+    every food, with its origin) and `food_versions` (every version of the
+    foods that have more than one).
 
     Args:
         con: DuckDB connection on which `create_source_views` was called and
             the Kratheos tables were loaded (`kratheos.load_tables`).
         kratheos_records: Normalised records of the Kratheos products, or
             None when there is none.
+        user_version_votes: Votes a version coming from a user needs to be
+            served instead of a record of a source.
 
     Returns:
         Counts of what the Kratheos layer added and changed.
@@ -444,7 +544,7 @@ def build_foods(con: duckdb.DuckDBPyConnection, kratheos_records: Path | None) -
         )
         relation = "all_records"
         if added_with_barcode:
-            select_by_barcode(con, "by_barcode_all", relation)
+            select_by_barcode(con, "by_barcode_all", relation, SOURCES_FIRST_ORDER)
             barcodes = "by_barcode_all"
     without_id = ", ".join(f'"{name}"' for name in base if name != "id")
     con.execute(
@@ -461,49 +561,48 @@ def build_foods(con: duckdb.DuckDBPyConnection, kratheos_records: Path | None) -
         WHERE NOT (kind = '{schema.KIND_PRODUCT}' AND barcode IS NOT NULL)
         """
     )
-    con.execute(f"CREATE OR REPLACE TEMP TABLE corrected AS {_corrected_select()}")
+    con.execute(f"CREATE OR REPLACE TEMP TABLE user_versions AS {_user_versions_select()}")
     con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE source_values AS
-        SELECT * FROM foods_base WHERE id IN (SELECT id FROM corrected)
-        """
+        "CREATE OR REPLACE TEMP TABLE food_versions AS "
+        + _food_versions_select(relation, user_version_votes)
+    )
+    identity = [
+        name
+        for name in ("id", *base[1:], "source_count", "sources", "other_records", "sources_agree")
+        if name not in VERSION_COLUMNS
+    ]
+    served = ",\n            ".join(
+        f"CASE WHEN s.food_id IS NULL THEN f.{name} ELSE s.{name} END AS {name}"
+        for name in VERSION_COLUMNS
     )
     con.execute(
-        """
+        f"""
         CREATE OR REPLACE TEMP TABLE foods AS
         SELECT
             row_number() OVER (ORDER BY f.id) AS food_pk,
-            f.*,
-            k.confirmations
-        FROM (
-            SELECT * FROM foods_base WHERE id NOT IN (SELECT id FROM corrected)
-            UNION ALL BY NAME
-            SELECT * FROM corrected
-        ) AS f
-        LEFT JOIN kratheos_confirmations AS k ON k.record_id = f.id
+            {", ".join("f." + name for name in identity)},
+            coalesce(s.version_id, f.record_id) AS record_id,
+            {served},
+            CAST(coalesce(s.votes, k.votes, 0) AS INTEGER) AS votes,
+            CAST(coalesce(c.versions, 1) AS INTEGER) AS versions_count
+        FROM foods_base AS f
+        LEFT JOIN (SELECT * FROM food_versions WHERE served) AS s ON s.food_id = f.id
+        LEFT JOIN (
+            SELECT food_id, count(*) AS versions FROM food_versions GROUP BY food_id
+        ) AS c ON c.food_id = f.id
+        LEFT JOIN kratheos_votes AS k ON k.version_id = f.record_id
         """
     )
-    con.execute("DROP TABLE foods_base")
     con.execute(
         f"""
         CREATE OR REPLACE TEMP TABLE food_names AS
-        WITH own AS (
-            SELECT food_pk, id, unnest(map_keys(names)) AS lang, unnest(map_values(names)) AS name
-            FROM foods
-        ),
-        corrected_names AS (
-            SELECT record_id, unnest(map_keys(names)) AS lang
-            FROM kratheos_corrections WHERE names IS NOT NULL
-        )
         SELECT
-            own.food_pk,
-            own.lang,
-            own.name,
-            CASE WHEN c.lang IS NULL THEN '{NAME_ORIGIN_SOURCE}'
-                 ELSE '{NAME_ORIGIN_KRATHEOS}' END AS origin,
-            CASE WHEN c.lang IS NULL THEN NULL ELSE '{NAME_FROM_CORRECTION}' END AS kratheos_origin
-        FROM own
-        LEFT JOIN corrected_names AS c ON c.record_id = own.id AND c.lang = own.lang
+            food_pk,
+            unnest(map_keys(names)) AS lang,
+            unnest(map_values(names)) AS name,
+            '{NAME_ORIGIN_SOURCE}' AS origin,
+            CAST(NULL AS VARCHAR) AS kratheos_origin
+        FROM foods
         UNION ALL
         SELECT f.food_pk, t.lang, t.name, '{NAME_ORIGIN_KRATHEOS}', t.origin
         FROM kratheos_translations AS t
@@ -511,40 +610,52 @@ def build_foods(con: duckdb.DuckDBPyConnection, kratheos_records: Path | None) -
         WHERE map_extract(f.names, t.lang)[1] IS NULL
         """
     )
-    corrections, corrections_applied = con.execute(
-        "SELECT (SELECT count(*) FROM kratheos_corrections), (SELECT count(*) FROM corrected)"
+    versions, versions_applied = con.execute(
+        "SELECT (SELECT count(*) FROM kratheos_versions), (SELECT count(*) FROM user_versions)"
     ).fetchone()
-    confirmations, confirmations_applied = con.execute(
+    votes, votes_applied = con.execute(
         """
-        SELECT (SELECT count(*) FROM kratheos_confirmations),
-               (SELECT count(*) FROM foods WHERE confirmations IS NOT NULL)
+        SELECT
+            (SELECT count(*) FROM kratheos_votes),
+            (SELECT count(*) FROM kratheos_votes AS k
+             WHERE k.version_id IN (SELECT version_id FROM food_versions)
+                OR k.version_id IN (SELECT record_id FROM foods WHERE versions_count = 1))
+        """
+    ).fetchone()
+    several, from_user = con.execute(
+        f"""
+        SELECT count(*) FILTER (WHERE versions_count > 1),
+               count(*) FILTER (WHERE starts_with(record_id, '{kratheos.VERSION_PREFIX}'))
+        FROM foods
         """
     ).fetchone()
     translations, translations_applied, translations_known = con.execute(
         f"""
         SELECT
             (SELECT count(*) FROM kratheos_translations),
-            (SELECT count(*) FROM food_names
-             WHERE origin = '{NAME_ORIGIN_KRATHEOS}'
-               AND kratheos_origin <> '{NAME_FROM_CORRECTION}'),
+            (SELECT count(*) FROM food_names WHERE origin = '{NAME_ORIGIN_KRATHEOS}'),
             (SELECT count(*) FROM kratheos_translations AS t JOIN foods AS f ON f.id = t.record_id
              WHERE map_extract(f.names, t.lang)[1] IS NOT NULL)
         """
     ).fetchone()
-    con.execute("DROP TABLE corrected")
+    con.execute("DROP TABLE foods_base")
+    con.execute("DROP TABLE user_versions")
     return {
         "products": added,
         "products_with_valid_barcode": added_with_barcode,
-        "corrections": corrections,
-        "corrections_applied": corrections_applied,
-        "corrections_without_target": corrections - corrections_applied,
-        "confirmations": confirmations,
-        "confirmations_applied": confirmations_applied,
-        "confirmations_without_target": confirmations - confirmations_applied,
+        "versions": versions,
+        "versions_applied": versions_applied,
+        "versions_without_target": versions - versions_applied,
+        "votes": votes,
+        "votes_applied": votes_applied,
+        "votes_without_target": votes - votes_applied,
         "translations": translations,
         "translations_applied": translations_applied,
         "translations_ignored_name_already_given": translations_known,
         "translations_without_target": translations - translations_applied - translations_known,
+        "user_version_votes": int(user_version_votes),
+        "foods_with_several_versions": several,
+        "foods_served_from_a_user_version": from_user,
     }
 
 
@@ -751,7 +862,7 @@ def foods_statistics(con: duckdb.DuckDBPyConnection) -> dict:
 
     Returns:
         Number of foods by kind and by source, of names by origin, and of
-        foods kept with the values of their source.
+        versions kept for the foods that have several.
     """
     foods, generic, with_barcode, without_barcode = con.execute(
         f"""
@@ -772,7 +883,5 @@ def foods_statistics(con: duckdb.DuckDBPyConnection) -> dict:
         "names_by_origin": _counts(
             con, "SELECT origin, count(*) FROM food_names GROUP BY 1 ORDER BY 1"
         ),
-        "foods_kept_with_source_values": con.execute(
-            "SELECT count(*) FROM source_values"
-        ).fetchone()[0],
+        "versions_kept": con.execute("SELECT count(*) FROM food_versions").fetchone()[0],
     }

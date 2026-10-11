@@ -138,7 +138,7 @@ def stored_path(locations: Locations, source: Source, entry: SourceFile) -> Path
         The path of the file for the storage kind of the source.
     """
     if source.mirror == MIRROR_GIT:
-        return locations.sources / source.id / entry.name
+        return locations.sources / source.storage / entry.name
     return locations.mirror / asset_name(source.id, entry.name)
 
 
@@ -500,6 +500,42 @@ def acquire(
     raise DownloadError(f"{entry.name}: no stored copy at {dest}{failure}")
 
 
+def directory_files(source: Source, locations: Locations, pattern: str = "*.csv") -> list[Acquired]:
+    """List the files of a source that is read from a directory of `sources/`.
+
+    Such a source is not downloaded: whoever commits a file to the directory
+    made it available. The files are taken as they are, in name order, and
+    the source is simply empty when the directory is missing or holds none.
+
+    Args:
+        source: A source declaring a `directory`.
+        locations: The directories of the workspace.
+        pattern: Which files of the directory belong to the source.
+
+    Returns:
+        The files, each described with its size and checksums.
+    """
+    folder = locations.sources / source.storage
+    if not folder.is_dir():
+        return []
+    files = []
+    for path in sorted(folder.glob(pattern)):
+        if not path.is_file():
+            continue
+        sha256, md5 = hash_file(path)
+        record = FileRecord(
+            url=f"sources/{source.storage}/{path.name}",
+            name=path.name,
+            size=path.stat().st_size,
+            sha256=sha256,
+            md5=md5,
+            status=ORIGIN_MIRROR,
+        )
+        detail = f"file stored in sources/{source.storage}/"
+        files.append(Acquired(path.name, path, record, ORIGIN_MIRROR, detail))
+    return files
+
+
 def update_index(mirror_dir: Path, index: dict, source: Source, acquired: list[Acquired]) -> dict:
     """Record in the index the mirrored files a build just used.
 
@@ -617,7 +653,7 @@ def describe(acquired: Acquired, index: dict, source: Source) -> dict:
     }
     if acquired.origin != ORIGIN_OVERRIDE:
         if source.mirror == MIRROR_GIT:
-            entry["stored_as"] = f"sources/{source.id}/{acquired.name}"
+            entry["stored_as"] = f"sources/{source.storage}/{acquired.name}"
         else:
             asset = asset_name(source.id, acquired.name)
             entry["stored_as"] = f"mirror/{asset}"

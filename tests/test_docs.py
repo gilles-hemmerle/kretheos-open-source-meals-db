@@ -49,8 +49,9 @@ def test_committed_kratheos_layer_is_empty_and_has_the_documented_layout() -> No
     """The committed layer has the layout of the code and holds no row."""
     layer = kratheos.read_layer(REPOSITORY / kratheos.FILE_NAME)
     assert layer.meta == {"schema_version": str(kratheos.SCHEMA_VERSION), "exported_at": ""}
-    assert not (layer.products or layer.corrections or layer.confirmations or layer.translations)
-    forbidden = ("user", "account", "handle", "email", "author", "device", "person")
+    assert layer.rows == 0
+    assert not (layer.products or layer.versions or layer.votes or layer.translations)
+    forbidden = ("user", "account", "handle", "email", "author", "device", "person", "contributor")
     for table, columns in kratheos.TABLES.items():
         for name, _ in columns:
             assert not any(word in name for word in forbidden), (table, name)
@@ -87,3 +88,4 @@ def test_stored_small_sources_match_their_pinned_checksums(
             assert record.url == entry.url
             assert entry.sha256 in (None, sha256)
             assert entry.md5 in (None, md5)
+

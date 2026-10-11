@@ -29,6 +29,12 @@
 #                 of generic foods describes (the country of the authority
 #                 that publishes it); empty for a source whose records carry
 #                 their own countries
+#   directory     for a source that is not downloaded: the folder of sources/
+#                 whose files are the source. Whatever it holds is read, and
+#                 the source is empty when it holds nothing. Such a source
+#                 lists no file and is not a published database, so the four
+#                 fields about the publisher's terms are not required: the
+#                 person who commits a file there decides it may be published
 #   mirror        where the files are stored, exactly as downloaded:
 #                   "git"      small files, downloaded into sources/<id>/
 #                              and committed with the repository
@@ -267,6 +273,35 @@ reason = ""
   name = "McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021.xlsx"
   url = "https://assets.publishing.service.gov.uk/media/60538b91e90e07527df82ae4/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021..xlsx"
   sha256 = "436e9445ef2adb2a75f3d7edd51302de3adad25385f9795fc94ba58bd030e97d"
+
+# The nutrition values restaurant chains publish on their own sites. Not an
+# open database and not downloaded by the build: one CSV file per chain and
+# country, committed to sources/chains/ by the owner of the repository once
+# he has decided that the values of that chain may be published. The
+# repository ships none, and the source is empty without a file.
+[[source]]
+id = "chain"
+name = "Restaurant chains"
+publisher = "Each chain, on its official site"
+homepage = ""
+adapter = "chain"
+version = "files of sources/chains/"
+released = ""
+kinds = ["product"]
+priority = 7
+licence = "publisher-terms"
+licence_name = "No open licence: nutrition values published by each chain on its official site"
+licence_url = ""
+terms_url = ""
+terms_quote = ""
+terms_checked = ""
+attribution = "Nutrition values of restaurant chains, as each chain publishes them on its official site; every record links to the page it was read on."
+share_alike = false
+country = ""
+mirror = "git"
+directory = "chains"
+enabled = true
+reason = ""
 
 [[source]]
 id = "bls"

@@ -12,6 +12,10 @@ converts each source to one common schema, and writes:
 - Parquet, CSV and JSON Lines files holding every record of every source;
 - `dist/manifest.json`, which says what was built from what.
 
+The same repository holds a small [service](#the-service) that answers
+searches, barcode lookups and contributions over HTTP from that database, so
+that anyone can host it.
+
 It was written for [Kratheos](#the-kratheos-layer), an AI sport coach with a
 nutrition part, but nothing in the database is specific to it.
 
@@ -51,6 +55,7 @@ laptop.
 | `make build MIRROR_URL=<address>` | Same as `make build`, fetching missing large files from a release |
 | `make download` | Obtain or verify the source files without building |
 | `make release-files` | Lay out in `release/` what a release must carry |
+| `make serve` | Run the [service](#the-service) on `dist/food.sqlite` |
 | `make test`, `make lint` | Tests (no network) and code style |
 | `make clean` | Remove `work/` and `dist/`; the stored originals stay |
 
@@ -68,13 +73,16 @@ protect the disk, `--override`, see below).
 | `swiss` | [Swiss Food Composition Database](https://naehrwertdaten.ch/) | FSVO, Switzerland | 7.1 (2026-07) | opendata.swiss "Open use. Must provide the source." |
 | `cnf` | [Canadian Nutrient File](https://open.canada.ca/data/en/dataset/1b6139bd-ed7e-4043-bc28-ff00e10f3109) | Health Canada | 2026 | Open Government Licence - Canada |
 | `cofid` | [CoFID](https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid) | Public Health England | 2021 | Open Government Licence v3.0 |
+| `chain` | [Restaurant chains](#restaurant-chains) | each chain, on its own site | the files of `sources/chains/` | none: see below |
 
 `sources.toml` holds, for each source, the page where its terms were read,
 the sentence that allows redistribution and the date it was checked. Two
 databases are listed there but disabled, with the reason: the German BLS 4.0
 (free to use, but no licence text and nothing on redistribution) and FoodRepo
-(the service closed). A source is only enabled once its terms clearly allow
-redistribution.
+(the service closed). A downloaded source is only enabled once its terms
+clearly allow redistribution. `chain` is the one source that is not an open
+database: it holds nothing unless files are committed for it, and committing
+one is a decision about that chain ([Restaurant chains](#restaurant-chains)).
 
 **How the output is licensed.** Open Food Facts is share-alike, so the
 database as a whole is made available under the
@@ -91,7 +99,7 @@ read, and no image is taken.
 
 | File | Content |
 | --- | --- |
-| `food.sqlite` | The main database, Kratheos layer applied (see below) |
+| `food.sqlite` | The main database, Kratheos layer applied, with every version of the foods that have several (see below) |
 | `generic_foods.parquet`, `.csv.gz`, `.jsonl.gz` | Every generic food of every source |
 | `products.parquet` | Every product record of every source |
 | `products_by_barcode.parquet` | One preferred source record per barcode |
@@ -118,17 +126,17 @@ Aggregation rules:
 
 | Table | Content |
 | --- | --- |
-| `foods` | One row per food: the generic foods, one row per barcode, and the products without a valid barcode (restaurant items mostly). Columns of the common schema, plus `record_id`, `confirmations`, `source_count`, `sources`, `other_records`, `sources_agree`. Lists are JSON text, booleans are 0 or 1. |
-| `names` | Every name of every food, one row per language: `food_pk`, `lang`, `name`, `origin` (`source` or `kratheos`), `kratheos_origin` (`machine`, `human` or `correction`). |
+| `foods` | One row per food: the generic foods, one row per barcode, and the products without a valid barcode (restaurant items mostly). Columns of the common schema, plus `record_id` (the version whose values the row holds), `votes`, `versions_count`, `source_count`, `sources`, `other_records`, `sources_agree`. Lists are JSON text, booleans are 0 or 1. |
+| `names` | Every name of every food, one row per language: `food_pk`, `lang`, `name`, `origin` (`source` or `kratheos`), `kratheos_origin` (`machine` or `human`, for a name added in Kratheos). |
 | `foods_fts` | FTS5 index over the names of a food in every language it has, and its brand. Diacritics are ignored; prefixes of 2 and 3 letters are indexed. |
 | `food_countries` | One row per food and country, keyed by country first; `countries` counts foods per country. |
 | `languages` | The language codes present in `names`. |
 | `display_names` | View applying the rule for the name to show. |
-| `source_values` | The foods a Kratheos correction changed, as their source gives them. |
-| `sources` | Version, licence and attribution of each source. |
-| `meta` | Layout version, licence notice and the two helper queries below. |
+| `versions` | Every version of the values of the foods that have more than one: `food_pk`, `position` (order of the build), `version_id`, `origin` (`source` or `user`), `votes`, `served` (the one in `foods`), then its source, values, portion, countries, flags, link and date. See [Versions of a food](#versions-of-a-food). |
+| `sources` | Version, licence, attribution and `priority` (the fixed order) of each source. |
+| `meta` | Layout version (2), licence notice, the two helper queries below and `user_version_votes`. |
 
-Indexes: `foods(id)` and `foods(barcode)` are unique.
+Indexes: `foods(id)` and `foods(barcode)` are unique; `versions(version_id)`.
 
 Scan a barcode. Normalise it first (see [Barcodes](#barcodes)):
 
@@ -199,6 +207,45 @@ from kratheos_food_data.names import display_name
 display_name({"fr": "Abricot", "en": "Apricot"}, "de")  # "Apricot"
 ```
 
+### Versions of a food
+
+A food can have several versions of its values: one per record of a source
+that knows it (two sources share 352 584 barcodes, and disagree on 53 411 of
+them), the product added in Kratheos under its barcode, and the versions
+users propose. Nothing is averaged and nothing is overwritten: every version
+is kept in `versions`, with the number of people who voted for it.
+
+- **Who the food is** (`id`, `kind`, `barcode`, `name`, the names, `brand`,
+  `category`, `is_drink`, `popularity`) comes from one record, the one the
+  [aggregation rule](#what-is-in-dist) prefers among the sources; a product
+  added in Kratheos only gives them when no source knows the barcode. It does
+  not change with the votes.
+- **Whose values are served**:
+  1. a version entered in Kratheos (`origin` `user`: a product added, a
+     version proposed) needs at least 3 votes to be served instead of a
+     record of a source. The number is a setting (`--user-version-votes`,
+     `FOOD_DATA_USER_VERSION_VOTES`), recorded in `meta`. A food no source
+     knows has only such versions: they all count;
+  2. a service that knows the country of a person keeps the versions that
+     list it, when at least one does;
+  3. the most voted wins;
+  4. a tie, or no vote at all: plausible values, complete macros, most
+     recent, fixed source order, then the identifier.
+
+The row of a food in `foods` holds the values served when no country is
+asked for (`record_id` names the version), so someone who only reads `foods`
+gets one coherent answer. With an empty layer that is the preferred record of
+each barcode, exactly as a build without votes always was.
+
+```sql
+SELECT v.version_id, v.origin, v.votes, v.served, v.countries, v.energy_kcal
+FROM versions AS v JOIN foods AS f ON f.pk = v.food_pk
+WHERE f.id = 'gtin:3017620422003' ORDER BY v.position;
+```
+
+`kratheos_food_data.versions.choose_served` is the rule in Python, country
+included; the tests check that it and the SQL of the build agree.
+
 ## Identifiers: a promise
 
 Favourites and diary entries of an application point at foods of this
@@ -206,9 +253,12 @@ database, so the identifier of a food (`foods.id`) never changes when the
 database is rebuilt:
 
 - **A food with a valid barcode is `gtin:<canonical barcode>`**, for instance
-  `gtin:3017620422003`. It identifies the product itself, whichever source is
-  preferred this time. The source record behind it is in `record_id`
+  `gtin:3017620422003`. It identifies the product itself, whichever version
+  is served this time. The version behind its values is in `record_id`
   (`off:3017620422003`), the records of the other sources in `other_records`.
+- **A version** is identified by the record of its source
+  (`usda:branded:3017620422003`), or by `kratheos:v:<id>` when a user
+  proposed it. These are stable too: votes are kept by version.
 - **Every other food is `<source>:<identifier in the source>`**, built only
   from what the source keeps stable across its releases:
 
@@ -223,6 +273,7 @@ database is rebuilt:
 | `swiss` | the database ID | 1 128 of the 1 145 IDs of version 6.5 (2023) are in 7.1 (2026). |
 | `cnf` | `Food_Code` | 598 of the 607 foods added in 2015 are under the same code in 2026. |
 | `cofid` | the food code | Per the user guide each food has a unique code, and a food whose data are replaced gets a new one. |
+| `chain` | chain, country and the key the site gives the product, `chain:burger-king:ch:<key>` | The key is the one of the chain's own site. A site that gives none leaves the name: the product keeps its identifier as long as the chain keeps the name. |
 | `kratheos` | the identifier given in Kratheos, stored in `kratheos.sqlite` | Stable by construction. |
 
 No identifier comes from a counter, a row number or the order of processing.
@@ -249,7 +300,7 @@ One record per food of a source. Values are per 100 g, or per 100 ml when
 | Column | Type | Meaning |
 | --- | --- | --- |
 | `id` | text | Identifier of the source record, `<source>:<id in the source>` (in `food.sqlite`: the public identifier, see above) |
-| `source` | text | `off`, `usda`, `ciqual`, `swiss`, `cnf`, `cofid`, `kratheos` |
+| `source` | text | `off`, `usda`, `ciqual`, `swiss`, `cnf`, `cofid`, `chain`, `kratheos` |
 | `source_dataset` | text | Sub-dataset inside the source (`foundation`, `sr_legacy`, `fndds`, `branded`...) |
 | `source_record_id` | text | Identifier inside the source |
 | `kind` | text | `generic` (food-composition table) or `product` (branded item) |
@@ -332,7 +383,7 @@ implausible: `energy_from_kj`, `salt_from_sodium`, `alcohol_from_abv`,
 `carbohydrate_includes_fiber`, `inexact_values`, `obsolete` (the source marks
 the product as no longer sold), `barcode_invalid` (the source has a barcode
 that is not a valid GTIN: the record is kept without it), `barcode_restricted`
-(an in-store number, not unique across retailers), `kratheos_corrected`.
+(an in-store number, not unique across retailers).
 
 Quality flags make a record implausible. A record that fails is kept and
 flagged, never corrected:
@@ -355,6 +406,9 @@ with almost no energy; the fibre margin exists because a United States label
 counts fibre at 4 kcal/g or at 0 where a European one counts 2. Known cases
 the check cannot explain: vinegar and lemon juice (energy from organic
 acids), and CoFID sugars above 100 g (monosaccharide equivalents).
+
+The [service](#the-service) adds one flag of its own to a food record,
+`versions_disagree`, when the versions of a food give different values.
 
 ## Barcodes
 
@@ -423,38 +477,231 @@ originals, aggregates the sources, then applies the layer:
 
 1. **`products`**: foods added in Kratheos, with or without a barcode. They
    become records of the source `kratheos`, identified by `kratheos:<id>`,
-   with the countries given at creation. One with a barcode competes for
-   that barcode like the record of any source, Kratheos coming last in the
-   fixed order.
-2. **`corrections`**: corrected values for a food. They replace the values in
-   `foods`, the quality checks are run again, and the food is flagged
-   `kratheos_corrected`. The source's own values stay available: in
-   `source_values`, and untouched in the Parquet files.
-3. **`confirmations`**: how many people confirmed the values of a food.
+   with the countries given at creation. One with a barcode a source also
+   knows becomes one more [version](#versions-of-a-food) of that food.
+2. **`versions`**: other values proposed for a food of any source, with
+   their own portion and countries. A version replaces nothing: it stands
+   beside the records of the sources, under `kratheos:v:<id>`.
+3. **`votes`**: how many people voted for a version, whether it is a record
+   of a source, a product added in Kratheos or a version proposed by a user.
 4. **`translations`**: a name for a food in a language it lacks. A
    translation never replaces a name given by the source; `names.origin`
    tells the two apart.
 
 | Table | Columns |
 | --- | --- |
-| `meta` | `key`, `value`: `schema_version`, `exported_at` |
+| `meta` | `key`, `value`: `schema_version` (2), `exported_at` |
 | `translations` | `record_id`, `lang`, `name`, `origin` (`machine` or `human`), `updated_at` |
 | `products` | `id`, `kind`, `barcode`, `name`, `name_lang`, `names` (JSON), the value columns, `countries` (JSON), `updated_at` |
-| `corrections` | `record_id`, `names` (JSON), the value columns (NULL = not corrected), `updated_at` |
-| `confirmations` | `record_id`, `confirmations`, `updated_at` |
+| `versions` | `version_id`, `food_id`, the columns of a version, `countries` (JSON), `updated_at` |
+| `votes` | `version_id`, `food_id`, `votes`, `updated_at` |
 
-The value columns are those of the common schema: `brand`, `category`,
-`basis`, `energy_kcal`, `protein_g`, `carbohydrate_g` (available
+The value columns of a product are those of the common schema: `brand`,
+`category`, `basis`, `energy_kcal`, `protein_g`, `carbohydrate_g` (available
 carbohydrate), `sugars_g`, `fat_g`, `saturated_fat_g`, `fiber_g`, `salt_g`,
-`alcohol_g`, `serving_size`, `serving_unit`, `serving_text`, `is_drink`.
-`record_id` is the identifier of a food in `food.sqlite` (`gtin:...` for a
-food with a barcode).
+`alcohol_g`, `serving_size`, `serving_unit`, `serving_text`, `is_drink`. The
+columns of a version are the same without `brand`, `category` and `is_drink`:
+a version says what a food contains, not what it is. `record_id` and
+`food_id` are the identifier of a food in `food.sqlite` (`gtin:...` for a
+food with a barcode); `version_id` is a version of it.
 
 **Never who.** The file holds no account, no handle and no identifier of a
-person, only counts. Its layout is closed: the build refuses a file that has
-a table or a column not listed above.
+person: who proposed a version or voted for one is not in it, only counts.
+Its layout is closed: the build refuses a file that has a table or a column
+not listed above.
 
 `uv run food-data kratheos-init` creates an empty file when there is none.
+The file is written by the service ([the weekly export](#the-weekly-export));
+nobody edits it by hand.
+
+## Restaurant chains
+
+The big chains publish the nutrition values of their menu on their own
+sites. The source `chain` reads them from CSV files committed in
+`sources/chains/`, one per chain and country (`burgerking_ch.csv`). The build
+never downloads them, and **the repository ships none**: these values are not
+under an open licence, and whether those of a chain may be published is a
+decision to take chain by chain, by whoever commits its file. Without a file
+the source is there and empty.
+
+Columns read (a file may hold more): `chain`, `country`, `language`,
+`product_name`, `category`, `product_key`, `portion_size`, `portion_unit`
+(`g` or `ml`), `is_drink` (`yes` or `no`), `energy_kcal_per_100`,
+`protein_g_per_100`, `carbohydrate_g_per_100`, `sugars_g_per_100`,
+`fat_g_per_100`, `saturated_fat_g_per_100`, `fibre_g_per_100`,
+`salt_g_per_100`, `source_url`, `date_collected`.
+
+Each line becomes a product without barcode: the chain is its brand, the
+country of the file its country, the name is in the language of the file,
+`source_url` is the page the values were read on and `date_collected` its
+date. Values are per 100 g, or per 100 ml when the portion is in ml.
+Carbohydrate is available carbohydrate, except for the United States and
+Canada, where menus give the total and fibre is subtracted. Two files of the
+same chain and country in two languages give one product with two names. A
+line without energy is dropped and counted; a line whose values make no sense
+is kept and flagged, like any record.
+
+Records of this source carry the licence `publisher-terms`: no open licence.
+Someone who publishes a database built with such files publishes those values
+with it.
+
+## The service
+
+`food-data serve` answers the API over HTTP: search as a person types,
+lookup by barcode, read by identifier, and the contributions of users
+(products added, versions of the values proposed, votes, names, reports).
+[`docs/api.md`](docs/api.md) is its reference: the contract agreed with the
+Kratheos backend, and how the service implements it.
+
+```sh
+make build                              # or install a ready-made database, below
+make serve TOKEN=a-long-shared-secret   # http://127.0.0.1:8750
+curl 'http://127.0.0.1:8750/v1/foods/search?q=pain+compl&lang=fr&country=CH'
+curl 'http://127.0.0.1:8750/v1/barcodes/3017620422003?lang=fr'
+```
+
+One process, the Python standard library, SQLite and nothing else to
+install. It is meant to run on a private address, behind the application
+that authenticates people:
+
+- **reads need no authentication**; writes and moderation need the shared
+  token (`Authorization: Bearer ...`). Without a token the service only
+  answers reads;
+- it listens on `127.0.0.1` unless told otherwise, and knows no person: only
+  the opaque key the application sends, which it stores hashed;
+- every request is bounded (64 KiB of body) and validated; values go through
+  the same quality checks as the build before they are accepted.
+
+### Its files
+
+Everything is in one data directory (`FOOD_DATA_DIR`; `data/` in the
+repository by default, never committed):
+
+| File | What it holds | Leaves the server? |
+| --- | --- | --- |
+| `food.sqlite` | The main database being served, read-only. Replaced in one step by a rebuild or an installation. | It is the public database. |
+| `manifest.json`, `identifiers.txt.gz` | The manifest and the identifier list of that build; the build date served comes from the manifest. | Public. |
+| `live.sqlite` (and `-wal`, `-shm` while running) | Everything entered through the service: products, versions, names; and what is private: the votes by hashed contributor key, the reports, what moderation hid, the history of writes. Mode 600. | Never as it is. Only through the export below. |
+| `contributor.key` | The secret the contributor keys are hashed with (HMAC-SHA-256), when `FOOD_DATA_KEY_SECRET` does not give it. Mode 600. | Never. |
+| `rebuild.json` | The report of the last rebuild. | No. |
+
+`live.sqlite` is the only copy of what was entered since the last export:
+back it up (`sqlite3 live.sqlite ".backup copy.sqlite"`, safe while the
+service runs). A live database that does not exist yet is created, and takes
+over what the `kratheos.sqlite` of the repository holds, so that a service
+started from a published layer goes on from it; `food-data import-layer`
+does the same later, adding what the live database lacks and changing
+nothing it has.
+
+What is written is visible at once, in search, by barcode and by identifier:
+every read puts the main database and the live database together. Once a
+rebuild has folded the live data into `food.sqlite`, both hold the same
+versions and the same names, each kept once, and the votes of a food are
+those of the live database alone: nothing is counted twice.
+
+### Settings
+
+| Variable | Option | Default | |
+| --- | --- | --- | --- |
+| `FOOD_DATA_DIR` | | `data/` | The data directory |
+| `FOOD_DATA_DATABASE` | `--database` | `food.sqlite` in it | The main database |
+| `FOOD_DATA_LIVE` | `--live` | `live.sqlite` in it | The live database |
+| `FOOD_DATA_TOKEN` | | none | Shared secret of writes and moderation, 16 characters at least |
+| `FOOD_DATA_KEY_SECRET` | | `contributor.key` | Secret the contributor keys are hashed with |
+| `FOOD_DATA_HOST`, `FOOD_DATA_PORT` | `--host`, `--port` | `127.0.0.1`, `8750` | Where to listen |
+| `FOOD_DATA_USER_VERSION_VOTES` | `--user-version-votes` | 3 | Votes a user's version needs to be served instead of a source; also read by the build |
+| `FOOD_DATA_SEARCH_BUDGET_MS` | | 500 | Time a search may spend in the index |
+
+### The weekly export
+
+```sh
+uv run food-data export-layer            # writes kratheos.sqlite from the live database
+uv run food-data export-layer --commit   # and commits it, alone, with a dated message
+uv run food-data export-layer --commit --push   # and pushes, when a remote exists
+```
+
+The file written has the [layout of the layer](#the-kratheos-layer) and
+holds what users see and nothing else: no contributor key, hashed or not, no
+report, nothing moderation hid (a hidden food is left out with everything
+attached to it, a hidden version with its votes). Votes are counts. The same
+live data gives the same file, byte for byte, so a week without a change
+gives no commit; `--commit` commits that file only, whatever else changed in
+the repository. An export refuses to replace a layer that holds data by an
+empty one, which is what a lost live database would do.
+
+### The periodic rebuild
+
+```sh
+uv run food-data rebuild                 # export, rebuild, compare, swap
+uv run food-data rebuild --from-mirror   # the same from the stored originals only
+```
+
+1. exports the live database to `kratheos.sqlite`;
+2. builds into `work/rebuild/`, never into the files being served;
+3. compares the result with the database being served: foods, foods per
+   source, and the identifiers (`ids-diff`);
+4. **refuses** a result that loses more than 2 % of the foods or of the
+   identifiers (`--max-loss`), or a fifth of the foods of one source: the old
+   file stays, the new one is left in `work/rebuild/` with a report, and the
+   command ends with status 2;
+5. otherwise moves the new file over the old one in one step. The running
+   service notices, opens it, and goes on: requests being answered finish on
+   the old file, no request is lost and nothing is restarted.
+
+### A ready-made database
+
+Someone who hosts the service does not need the 8 GB of originals:
+
+```sh
+uv run food-data database-files          # lays out release-database/ to publish
+uv run food-data install-database --url https://example.org/food/v1
+```
+
+`database-files` writes what to publish under one address: the database (in
+parts when it exceeds what a release accepts), its manifest, the identifier
+list, the layer it was built with, and `DATABASE.json`, which gives the
+checksum of each. `install-database` downloads them (resuming an interrupted
+download), verifies every checksum, applies the comparison of a rebuild
+(`--force` to install anyway), takes the layer over into the live database
+and swaps the file in the same way.
+
+### Hosting
+
+**Debian.** `debian/` builds the package `kratheos-food-data` for Debian
+trixie (`dpkg-buildpackage -us -uc -b`, or the builder described by
+`builder.yml`): code and its Python environment in
+`/usr/share/kratheos-food-data`, settings in
+`/etc/kratheos-food-data/service.conf` (token and key secret generated at the
+first installation), data in `/var/lib/kratheos-food-data`, an unprivileged
+user, a sandboxed service and two timers: the export every Monday, the
+rebuild on the first Sunday of the month. The package ships no data:
+
+```sh
+sudo -u kratheos-food-data git clone <this repository> /var/lib/kratheos-food-data/repository
+sudo systemctl start kratheos-food-data-rebuild        # builds from the sources (9 GB), or:
+sudo food-data install-database --url https://example.org/food/v1
+```
+
+`/usr/bin/food-data` is the command of the package: it reads the settings of
+`service.conf`, works as the service user even when root types it, and takes
+the clone as its repository.
+
+The timers only run once `/var/lib/kratheos-food-data/repository` exists: it
+is the clone that holds `sources.toml`, the stored originals and
+`kratheos.sqlite`, where the export is committed and the rebuild works.
+
+**Docker.** One directory of the host holds all the data:
+
+```sh
+docker build -t kratheos-food-data .
+docker compose -f compose.example.yml up -d
+docker compose -f compose.example.yml run --rm food \
+    install-database --url https://example.org/food/v1
+```
+
+`compose.example.yml` mounts `./data` of the host on `/data`: the databases
+live on the host, never in a volume of Docker. The port is published on
+`127.0.0.1` only.
 
 ## Development
 
@@ -467,6 +714,9 @@ make lint
 sources.toml             the sources, their files and their licences
 kratheos.sqlite          the Kratheos layer
 sources/                 stored originals of the small sources
+docs/api.md              the API of the service
+debian/, builder.yml     the Debian package
+Dockerfile, compose.example.yml
 src/kratheos_food_data/
     cli.py               command line
     build.py             the pipeline
@@ -479,11 +729,24 @@ src/kratheos_food_data/
     normalize.py         derivations and quality checks, same for every source
     aggregate.py         aggregation of the sources, then the Kratheos layer
     kratheos.py          layout and reading of kratheos.sqlite
+    versions.py          the rule choosing the version served
+    plausibility.py      the quality checks, for one food at a time
     sqlite_export.py     writes food.sqlite and the identifier list
     names.py             the rule for the name to show
     lookup.py            barcode, identifier and name lookups
     fastfood.py          measures prepared dishes and restaurant chains
     manifest.py          writes manifest.json
+    service/             the HTTP service
+        settings.py      settings, from the environment and the options
+        catalogue.py     food.sqlite, read-only, replaced without a pause
+        live.py          the live database
+        foods.py         a food from both, and its JSON record
+        search.py        search in bounded time
+        validation.py    what a request may contain
+        api.py           the endpoints
+        httpd.py         the HTTP server
+        export.py        live database to kratheos.sqlite, and the commit
+        maintenance.py   rebuild, comparison, swap, ready-made database
 tests/                   miniature sources and tests
 ```
 

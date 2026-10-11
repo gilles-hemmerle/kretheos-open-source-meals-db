@@ -103,6 +103,8 @@ class BuildOptions:
         force_download: Download every file again from upstream.
         all_formats: Also write the product tables as CSV and JSON Lines.
         min_free_gb: Free disk space that must remain, in GiB.
+        user_version_votes: Votes a version coming from a user needs to be
+            served instead of a record of a source.
     """
 
     only: list[str] | None = None
@@ -112,6 +114,7 @@ class BuildOptions:
     force_download: bool = False
     all_formats: bool = False
     min_free_gb: float = DEFAULT_MIN_FREE_GB
+    user_version_votes: int = aggregate.DEFAULT_USER_VERSION_VOTES
 
 
 def require_free_space(path: Path, min_free_gb: float, needed_bytes: int = 0) -> None:
@@ -182,6 +185,11 @@ def acquire_sources(
     acquired: dict[str, list[mirror.Acquired]] = {}
     for source in sources:
         log(f"Obtaining {source.name}")
+        if source.directory:
+            files = mirror.directory_files(source, locations)
+            log(f"  {len(files)} files in sources/{source.storage}/")
+            acquired[source.id] = files
+            continue
         files = []
         for entry in source.files:
             target = mirror.stored_path(locations, source, entry).parent
@@ -309,7 +317,7 @@ def run_build(workspace: Workspace, options: BuildOptions, log: Logger = print) 
         [kratheos.SOURCE_ID, kratheos.KRATHEOS_SOURCE.priority],
     )
     kratheos.load_tables(con, layer)
-    layer_statistics = aggregate.build_foods(con, kratheos_records)
+    layer_statistics = aggregate.build_foods(con, kratheos_records, options.user_version_votes)
     layer_statistics["products_dropped"] = kratheos_counts["dropped"]
     statistics["foods"] = aggregate.foods_statistics(con)
     timings["kratheos_layer"] = time.monotonic() - stage_started
@@ -319,7 +327,9 @@ def run_build(workspace: Workspace, options: BuildOptions, log: Logger = print) 
     described = [manifest.source_description(source, built[source.id]) for source in sources]
     described.append(manifest.source_description(kratheos.KRATHEOS_SOURCE, {}))
     database = workspace.dist / FOOD_DATABASE_NAME
-    foods = sqlite_export.write_food_database(con, database, described, manifest.DATABASE_LICENCE)
+    foods = sqlite_export.write_food_database(
+        con, database, described, manifest.DATABASE_LICENCE, options.user_version_votes
+    )
     outputs.append(
         aggregate.OutputFile(
             database,

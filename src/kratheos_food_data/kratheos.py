@@ -6,17 +6,20 @@ repository, and is applied by the build after the sources are aggregated:
 
 * `products`: foods added in Kratheos, with or without a barcode (a
   restaurant item has none). They become records of the source `kratheos`;
-* `corrections`: corrected values for a record of any source. The corrected
-  values are what the main database shows; the source's own values stay
-  available, with their source;
-* `confirmations`: how many people confirmed the values of a record;
-* `translations`: names Kratheos adds to a record in a language its source
+* `versions`: other values proposed by users for a food of any source. A
+  version never replaces anything: it stands beside the records of the
+  sources, and people vote for the one they find right;
+* `votes`: how many people voted for a version, whether it is a record of a
+  source (`off:...`), a product added in Kratheos (`kratheos:<id>`) or a
+  version proposed by a user (`kratheos:v:<id>`);
+* `translations`: names Kratheos adds to a food in a language its source
   does not give. A translation never replaces a name given by the source;
 * `meta`: version of this layout and date of the last export from Kratheos.
 
 Never who: the file holds no account, no handle and no identifier of a
-person. The layout below is closed: the build refuses a file with a table or
-a column that is not listed here, so nothing of the kind can slip in.
+person, only counts. The layout below is closed: the build refuses a file
+with a table or a column that is not listed here, so nothing of the kind can
+slip in.
 """
 
 from __future__ import annotations
@@ -31,15 +34,17 @@ import duckdb
 from . import schema
 from .config import MIRROR_GIT, Source
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SOURCE_ID = "kratheos"
 FILE_NAME = "kratheos.sqlite"
 TRANSLATION_ORIGINS = ("machine", "human")
+# Identifier of a version proposed by a user: `kratheos:v:<id>`. The record of
+# a product added in Kratheos is `kratheos:<id>`, so a product id never starts
+# with `v:`.
+VERSION_PREFIX = f"{SOURCE_ID}:v:"
+LICENCE = "ODbL-1.0"
 
-VALUE_COLUMNS = (
-    ("brand", "TEXT"),
-    ("category", "TEXT"),
-    ("basis", "TEXT"),
+NUTRIENT_COLUMNS = (
     ("energy_kcal", "REAL"),
     ("protein_g", "REAL"),
     ("carbohydrate_g", "REAL"),
@@ -49,11 +54,23 @@ VALUE_COLUMNS = (
     ("fiber_g", "REAL"),
     ("salt_g", "REAL"),
     ("alcohol_g", "REAL"),
+)
+SERVING_COLUMNS = (
     ("serving_size", "REAL"),
     ("serving_unit", "TEXT"),
     ("serving_text", "TEXT"),
+)
+# What a product carries besides its names: identity, values and one portion.
+VALUE_COLUMNS = (
+    ("brand", "TEXT"),
+    ("category", "TEXT"),
+    ("basis", "TEXT"),
+    *NUTRIENT_COLUMNS,
+    *SERVING_COLUMNS,
     ("is_drink", "INTEGER"),
 )
+# What a version carries: values and one portion. A version has no name.
+VERSION_VALUE_COLUMNS = (("basis", "TEXT"), *NUTRIENT_COLUMNS, *SERVING_COLUMNS)
 
 # Table -> ordered (column, declared type). This is the whole layout.
 TABLES: dict[str, tuple[tuple[str, str], ...]] = {
@@ -76,20 +93,26 @@ TABLES: dict[str, tuple[tuple[str, str], ...]] = {
         ("countries", "TEXT"),
         ("updated_at", "TEXT"),
     ),
-    "corrections": (
-        ("record_id", "TEXT"),
-        ("names", "TEXT"),
-        *VALUE_COLUMNS,
+    "versions": (
+        ("version_id", "TEXT"),
+        ("food_id", "TEXT"),
+        *VERSION_VALUE_COLUMNS,
+        ("countries", "TEXT"),
         ("updated_at", "TEXT"),
     ),
-    "confirmations": (
-        ("record_id", "TEXT"),
-        ("confirmations", "INTEGER"),
+    "votes": (
+        ("version_id", "TEXT"),
+        ("food_id", "TEXT"),
+        ("votes", "INTEGER"),
         ("updated_at", "TEXT"),
     ),
 }
 
 _VALUE_DDL = ",\n    ".join(f"{name} {kind}" for name, kind in VALUE_COLUMNS)
+_VERSION_VALUE_DDL = ",\n    ".join(
+    f"{name} {kind}" + (" NOT NULL" if name in ("basis", "energy_kcal") else "")
+    for name, kind in VERSION_VALUE_COLUMNS
+)
 
 DDL = f"""
 CREATE TABLE meta (
@@ -97,9 +120,9 @@ CREATE TABLE meta (
     value TEXT NOT NULL
 ) WITHOUT ROWID;
 
--- A name Kratheos adds to a record, in a language its source does not give.
+-- A name Kratheos adds to a food, in a language its source does not give.
 CREATE TABLE translations (
-    record_id TEXT NOT NULL,   -- id of a record of any source, e.g. ciqual:13000
+    record_id TEXT NOT NULL,   -- identifier of a food, e.g. ciqual:13000
     lang TEXT NOT NULL,        -- language code of the name
     name TEXT NOT NULL,
     origin TEXT NOT NULL CHECK (origin IN ('machine', 'human')),
@@ -111,7 +134,7 @@ CREATE TABLE translations (
 -- 100 g or 100 ml (basis); carbohydrate_g is available carbohydrate, fibre
 -- excluded, as on European labels.
 CREATE TABLE products (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY CHECK (id NOT LIKE 'v:%'),
     kind TEXT NOT NULL DEFAULT 'product' CHECK (kind IN ('generic', 'product')),
     barcode TEXT,              -- optional; a restaurant item has none
     name TEXT NOT NULL,
@@ -123,19 +146,24 @@ CREATE TABLE products (
     CHECK (basis IN ('100g', '100ml'))
 ) WITHOUT ROWID;
 
--- Corrected values for a record of a source. NULL means "not corrected".
-CREATE TABLE corrections (
-    record_id TEXT PRIMARY KEY,
-    names TEXT,                -- JSON object: corrected names by language code
-    {_VALUE_DDL},
+-- Other values proposed by a user for a food. Nothing is replaced: the
+-- version stands beside the records of the sources. Never who proposed it.
+CREATE TABLE versions (
+    version_id TEXT PRIMARY KEY CHECK (version_id LIKE '{VERSION_PREFIX}%'),
+    food_id TEXT NOT NULL,     -- identifier of the food in food.sqlite, e.g. gtin:3017620422003
+    {_VERSION_VALUE_DDL},
+    countries TEXT,            -- JSON array of ISO 3166-1 alpha-2 codes the values apply to
     updated_at TEXT NOT NULL,
-    CHECK (basis IS NULL OR basis IN ('100g', '100ml'))
+    CHECK (basis IN ('100g', '100ml'))
 ) WITHOUT ROWID;
 
--- How many people confirmed the values of a record. Never who.
-CREATE TABLE confirmations (
-    record_id TEXT PRIMARY KEY,
-    confirmations INTEGER NOT NULL CHECK (confirmations >= 0),
+-- How many people voted for a version: a record of a source (off:...), a
+-- product added in Kratheos (kratheos:<id>) or a version proposed by a user
+-- (kratheos:v:<id>). Never who.
+CREATE TABLE votes (
+    version_id TEXT PRIMARY KEY,
+    food_id TEXT NOT NULL,     -- the food the version belongs to
+    votes INTEGER NOT NULL CHECK (votes >= 0),
     updated_at TEXT NOT NULL
 ) WITHOUT ROWID;
 """
@@ -150,7 +178,7 @@ KRATHEOS_SOURCE = Source(
     released="",
     kinds=(schema.KIND_GENERIC, schema.KIND_PRODUCT),
     priority=1000,
-    licence="ODbL-1.0",
+    licence=LICENCE,
     licence_name="Open Database License 1.0",
     licence_url="https://opendatacommons.org/licenses/odbl/1-0/",
     terms_url="",
@@ -178,16 +206,31 @@ class Layer:
     Attributes:
         meta: The key and value pairs of the `meta` table.
         products: Rows of `products`, as dictionaries.
-        corrections: Rows of `corrections`, as dictionaries.
-        confirmations: Rows of `confirmations`, as dictionaries.
+        versions: Rows of `versions`, as dictionaries.
+        votes: Rows of `votes`, as dictionaries.
         translations: Rows of `translations`, as dictionaries.
     """
 
     meta: dict[str, str] = field(default_factory=dict)
     products: list[dict] = field(default_factory=list)
-    corrections: list[dict] = field(default_factory=list)
-    confirmations: list[dict] = field(default_factory=list)
+    versions: list[dict] = field(default_factory=list)
+    votes: list[dict] = field(default_factory=list)
     translations: list[dict] = field(default_factory=list)
+
+    @property
+    def rows(self) -> int:
+        """Return the number of rows the layer holds, every table together."""
+        return len(self.products) + len(self.versions) + len(self.votes) + len(self.translations)
+
+
+# Table -> column its rows are read in the order of, so that a layer always
+# reads the same way.
+ROW_ORDER = {
+    "products": "id",
+    "versions": "version_id",
+    "votes": "version_id",
+    "translations": "record_id, lang",
+}
 
 
 def create_database(path: Path) -> None:
@@ -255,7 +298,8 @@ def read_layer(path: Path) -> Layer:
         The content of the layer; an empty layer when the file is missing.
 
     Raises:
-        LayerError: When the file does not have the documented layout.
+        LayerError: When the file does not have the documented layout, or a
+            row breaks the rules on identifiers.
     """
     if not path.exists():
         return Layer()
@@ -264,16 +308,23 @@ def read_layer(path: Path) -> Layer:
         check_layout(connection)
         connection.row_factory = sqlite3.Row
         layer = Layer(meta=dict(connection.execute("SELECT key, value FROM meta").fetchall()))
-        for table in ("products", "corrections", "confirmations", "translations"):
-            order = "id" if table == "products" else "record_id"
+        for table, order in ROW_ORDER.items():
             rows = connection.execute(f"SELECT * FROM {table} ORDER BY {order}").fetchall()
             getattr(layer, table).extend(dict(row) for row in rows)
-        return layer
     finally:
         connection.close()
+    for product in layer.products:
+        if str(product["id"]).startswith("v:"):
+            raise LayerError(f"product {product['id']}: an id may not start with 'v:'")
+    for version in layer.versions:
+        if not str(version["version_id"]).startswith(VERSION_PREFIX):
+            raise LayerError(
+                f"version {version['version_id']}: the id must start with {VERSION_PREFIX}"
+            )
+    return layer
 
 
-def _json_object(text: str | None, what: str) -> dict[str, str]:
+def read_names(text: str | None, what: str) -> dict[str, str]:
     """Read a JSON object of language code to name.
 
     Args:
@@ -297,6 +348,30 @@ def _json_object(text: str | None, what: str) -> dict[str, str]:
     return {lang: " ".join(name.split()) for lang, name in value.items() if name.strip()}
 
 
+def read_countries(text: str | None, what: str) -> list[str] | None:
+    """Read a JSON array of country codes.
+
+    Args:
+        text: The JSON text, or None.
+        what: What is being read, for the error message.
+
+    Returns:
+        The codes in upper case, or None when there is none.
+
+    Raises:
+        LayerError: When the text is not a JSON array of strings.
+    """
+    if not text:
+        return None
+    try:
+        value = json.loads(text)
+    except ValueError as error:
+        raise LayerError(f"{what}: countries is not valid JSON") from error
+    if not isinstance(value, list) or not all(isinstance(code, str) for code in value):
+        raise LayerError(f"{what}: countries must be a JSON array of country codes")
+    return [code.upper() for code in value] or None
+
+
 def product_staging_rows(layer: Layer) -> list[dict]:
     """Turn the Kratheos products into staging rows, like an adapter does.
 
@@ -312,12 +387,8 @@ def product_staging_rows(layer: Layer) -> list[dict]:
     rows = []
     for product in layer.products:
         what = f"product {product['id']}"
-        names = _json_object(product["names"], what)
+        names = read_names(product["names"], what)
         names[product["name_lang"]] = " ".join(product["name"].split())
-        try:
-            countries = json.loads(product["countries"]) if product["countries"] else None
-        except ValueError as error:
-            raise LayerError(f"{what}: countries is not valid JSON") from error
         is_drink = product["is_drink"]
         rows.append(
             {
@@ -345,7 +416,7 @@ def product_staging_rows(layer: Layer) -> list[dict]:
                 "serving_unit": product["serving_unit"],
                 "serving_text": product["serving_text"],
                 "is_drink": None if is_drink is None else bool(is_drink),
-                "countries": [str(code).upper() for code in countries] if countries else None,
+                "countries": read_countries(product["countries"], what),
                 "source_url": None,
                 "updated_at": product["updated_at"],
             }
@@ -354,56 +425,51 @@ def product_staging_rows(layer: Layer) -> list[dict]:
 
 
 def load_tables(con: duckdb.DuckDBPyConnection, layer: Layer) -> None:
-    """Load corrections, confirmations and translations into DuckDB tables.
+    """Load versions, votes and translations into DuckDB tables.
 
-    Creates `kratheos_corrections`, `kratheos_confirmations` and
-    `kratheos_translations`, empty when the layer is.
+    Creates `kratheos_versions`, `kratheos_votes` and `kratheos_translations`,
+    empty when the layer is.
 
     Args:
         con: DuckDB connection of the build.
         layer: The Kratheos layer.
 
     Raises:
-        LayerError: When a correction has malformed names.
+        LayerError: When a version has malformed countries.
     """
     duck_types = {"TEXT": "VARCHAR", "REAL": "DOUBLE", "INTEGER": "BIGINT"}
-    value_ddl = ", ".join(f"{name} {duck_types[kind]}" for name, kind in VALUE_COLUMNS)
+    value_names = [name for name, _ in VERSION_VALUE_COLUMNS]
+    value_ddl = ", ".join(f"{name} {duck_types[kind]}" for name, kind in VERSION_VALUE_COLUMNS)
     con.execute(
         f"""
-        CREATE OR REPLACE TEMP TABLE kratheos_corrections (
-            record_id VARCHAR, names MAP(VARCHAR, VARCHAR), {value_ddl}, updated_at DATE
+        CREATE OR REPLACE TEMP TABLE kratheos_versions (
+            version_id VARCHAR, food_id VARCHAR, {value_ddl}, countries VARCHAR[],
+            updated_at DATE
         )
         """
     )
-    value_names = [name for name, _ in VALUE_COLUMNS]
-    placeholders = ", ".join("?" for _ in range(len(value_names) + 3))
-    for correction in layer.corrections:
-        names = _json_object(correction["names"], f"correction of {correction['record_id']}")
+    placeholders = ", ".join("?" for _ in range(len(value_names) + 2))
+    for version in layer.versions:
+        countries = read_countries(version["countries"], f"version {version['version_id']}")
         con.execute(
             f"""
-            INSERT INTO kratheos_corrections
-            SELECT record_id, CASE WHEN names = '{{}}' THEN NULL
-                              ELSE json_transform(names, '"MAP(VARCHAR, VARCHAR)"') END,
-                   {", ".join(value_names)}, CAST(updated_at AS DATE)
-            FROM (VALUES ({placeholders})) AS v(record_id, names, {", ".join(value_names)},
-                                               updated_at)
+            INSERT INTO kratheos_versions
+            SELECT version_id, food_id, {", ".join(value_names)},
+                   CAST(? AS VARCHAR[]), CAST(? AS DATE)
+            FROM (VALUES ({placeholders})) AS v(version_id, food_id, {", ".join(value_names)})
             """,
             [
-                correction["record_id"],
-                json.dumps(names, ensure_ascii=False),
-                *(correction[name] for name in value_names),
-                correction["updated_at"],
+                countries,
+                str(version["updated_at"])[:10],
+                version["version_id"],
+                version["food_id"],
+                *(version[name] for name in value_names),
             ],
         )
-    con.execute(
-        "CREATE OR REPLACE TEMP TABLE kratheos_confirmations"
-        " (record_id VARCHAR, confirmations BIGINT)"
-    )
-    if layer.confirmations:
-        con.executemany(
-            "INSERT INTO kratheos_confirmations VALUES (?, ?)",
-            [(row["record_id"], row["confirmations"]) for row in layer.confirmations],
-        )
+    con.execute("CREATE OR REPLACE TEMP TABLE kratheos_votes (version_id VARCHAR, votes BIGINT)")
+    votes = [(row["version_id"], row["votes"]) for row in layer.votes if row["votes"] > 0]
+    if votes:
+        con.executemany("INSERT INTO kratheos_votes VALUES (?, ?)", votes)
     con.execute(
         "CREATE OR REPLACE TEMP TABLE kratheos_translations"
         " (record_id VARCHAR, lang VARCHAR, name VARCHAR, origin VARCHAR)"
