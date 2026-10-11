@@ -91,16 +91,21 @@ FOOD_COLUMNS: tuple[tuple[str, str, str], ...] = (
 )
 
 # Parameters: :query (an FTS5 expression) and :country (ISO 3166-1 alpha-2).
+# Two steps keep it fast while a person types: the index ranks the matches and
+# keeps the best 200, which are then ordered with those of the person's
+# country first. Start at three letters: a shorter prefix matches hundreds of
+# thousands of foods and takes about a second.
 SEARCH_SQL = """
 SELECT f.id, f.name, f.brand, f.countries
-FROM foods_fts
-JOIN foods AS f ON f.pk = foods_fts.rowid
-WHERE foods_fts MATCH :query
+FROM (
+    SELECT rowid, rank FROM foods_fts WHERE foods_fts MATCH :query ORDER BY rank LIMIT 200
+) AS m
+JOIN foods AS f ON f.pk = m.rowid
 ORDER BY
     EXISTS (
         SELECT 1 FROM food_countries AS c WHERE c.country = :country AND c.food_pk = f.pk
     ) DESC,
-    bm25(foods_fts),
+    m.rank,
     f.popularity DESC
 LIMIT 20
 """.strip()

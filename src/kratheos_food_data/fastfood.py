@@ -69,7 +69,7 @@ DISHES: dict[str, str] = {
     "kebab, döner, gyros, shawarma": (
         r"\bkebabs?\b|\bkebap\b|\bd[öo]ner\b|\bgyros?\b|\bs?[hc]h?awarma\b"
     ),
-    "fries": r"\bfries\b|\bfrites\b|french[ -]fried|\bpommes[ -]frites\b",
+    "fries": r"\bfries\b|\bfrites de pomme|french[ -]fried|\bpommes[ -]frites\b",
     "sandwich": r"\bsandwich(es|s)?\b|\bpaninis?\b|\bcroque[ -]monsieur\b|\bsubs?\b",
     "wrap, burrito, taco": r"\bwraps?\b|\bburritos?\b|\btacos?\b|\bfajitas?\b|\bquesadillas?\b",
     "sushi": r"\bsushis?\b|\bmakis?\b|\bsashimis?\b",
@@ -88,6 +88,7 @@ NOT_A_DISH = (
     r"\bsauce\b|\bbread\b|\bbuns?\b|\bdough\b|\bcrust\b|\bbase\b|seasoning|\bspread\b|\bpain "
     r"|\bp[âa]te [àa]|\bpatt(y|ies)\b|\bflavou?r|\bpowder\b|\bpaste\b|\bmix\b|\bkit\b"
     r"|\brolls?, (hamburger|hot)|\bcheese, |\bfrom frozen\b|\bfrozen, unprepared\b"
+    r"|\bice cream\b|\bbiscuits?\b|\bcookies?\b|\bcrackers?\b|\brelish\b|\bshells?\b"
 )
 FAST_FOOD_LABEL = r"fast[ -]?foods?|restaurant|take[ -]?away|takeaway|restauration rapide"
 EUROPE = ("FR", "CH", "DE", "BE", "IT", "ES", "GB", "NL", "AT", "PT", "LU", "IE")

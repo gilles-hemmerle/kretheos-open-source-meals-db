@@ -32,7 +32,7 @@ DATABASE_LICENCE = {
     "contents": "Database Contents License 1.0 for the records taken from Open Food Facts; "
     "the licence of its source for every other record (column `licence`).",
     "notice": "Contains data from Open Food Facts and other sources, made available under the"
-    " Open Database License (ODbL) 1.0. See the table `sources` (or the files LICENSE-DATA.md"
+    " Open Database License (ODbL) 1.0. See the table `sources` (or the files LICENSE-DATA"
     " and ATTRIBUTION of the repository) for the licence and attribution of each source.",
 }
 

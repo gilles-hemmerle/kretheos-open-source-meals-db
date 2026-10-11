@@ -213,3 +213,55 @@ def test_large_file_is_restored_from_a_release_in_parts(
     assert not list(second.mirror.glob("*.part-*"))  # the parts are removed once joined
     record = json.loads((second.mirror / "demo.data.bin.meta.json").read_text())
     assert record["sha256"] == hashlib.sha256(CONTENT).hexdigest()
+
+
+def test_parts_placed_by_hand_in_the_mirror_are_joined(
+    file_server: FileServer,
+    tmp_path: Path,
+    declared_sources: dict[str, Source],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Parts copied into mirror/ with the index are joined without any network."""
+    monkeypatch.setattr(mirror, "MAX_ASSET_BYTES", PART_BYTES)
+    (file_server.root / "data.bin").write_bytes(CONTENT)
+    entry = SourceFile(name="data.bin", url=f"{file_server.url}/data.bin")
+    source = replace(declared_sources["ciqual"], id="demo", mirror="release", files=(entry,))
+    first = mirror.Locations(sources=tmp_path / "a" / "sources", mirror=tmp_path / "a" / "mirror")
+    index = mirror.empty_index()
+    acquired = [mirror.acquire(source, entry, first, index=index, log=quiet)]
+    mirror.update_index(first.mirror, index, source, acquired)
+    mirror.save_index(first.mirror, index)
+
+    # Someone downloads the attachments of a release into an empty mirror/.
+    second = mirror.Locations(sources=tmp_path / "b" / "sources", mirror=tmp_path / "b" / "mirror")
+    mirror.prepare_release(first.mirror, second.mirror, log=quiet)
+    assert not (second.mirror / "demo.data.bin").exists()
+    file_server.requests.clear()
+    item = mirror.acquire(
+        source, entry, second, index=mirror.load_index(second.mirror), from_mirror=True, log=quiet
+    )
+    assert file_server.requests == []
+    assert (item.origin, item.detail) == (mirror.ORIGIN_MIRROR, "joined from parts")
+    assert item.path.read_bytes() == CONTENT
+
+    # Without the parts and without an address, there is nothing to rebuild from.
+    third = mirror.Locations(sources=tmp_path / "c" / "sources", mirror=tmp_path / "c" / "mirror")
+    with pytest.raises(DownloadError, match="no stored copy"):
+        mirror.acquire(source, entry, third, index=index, from_mirror=True, log=quiet)
+
+
+def test_replaced_upstream_file_does_not_replace_the_pinned_copy(
+    file_server: FileServer, tmp_path: Path, declared_sources: dict[str, Source]
+) -> None:
+    """A publisher replaces a pinned file: the stored copy is kept, and it is said."""
+    (file_server.root / "data.bin").write_bytes(CONTENT)
+    pinned = hashlib.sha256(CONTENT).hexdigest()
+    source = _source(declared_sources, "git", f"{file_server.url}/data.bin", sha256=pinned)
+    locations = _locations(tmp_path)
+    index = mirror.empty_index()
+    mirror.acquire(source, source.files[0], locations, index=index, log=quiet)
+    (file_server.root / "data.bin").write_bytes(CONTENT + b"a new edition")
+    item = mirror.acquire(source, source.files[0], locations, index=index, log=quiet)
+    assert item.origin == mirror.ORIGIN_MIRROR
+    assert "upstream failed" in item.detail and "sha256" in item.detail
+    assert item.path.read_bytes() == CONTENT

@@ -40,10 +40,11 @@
 #   name          file name (in sources/<id>/, or after `<id>.` in mirror/)
 #   url           where to download it
 #   sha256 / md5  checksum pinned for a file published under a versioned
-#                 address. A pinned file is never downloaded twice, and the
-#                 build stops if the publisher replaces it: read what changed,
-#                 then update the version and the checksum here. After a first
-#                 download the checksums are in downloads/<id>/<name>.meta.json
+#                 address. A pinned file is never downloaded twice. If the
+#                 publisher replaces it, the build keeps the stored copy and
+#                 says so: read what changed, then update the version and the
+#                 checksum here. The checksums of a downloaded file are in the
+#                 .meta.json sidecar next to it
 
 [[source]]
 id = "off"
@@ -135,7 +136,7 @@ licence_url = "https://spdx.org/licenses/etalab-2.0.html"
 terms_url = "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/RDMHWY"
 terms_quote = "Les données et les informations de la Table Ciqual 2025 sont mises à disposition du public par l'Agence nationale de sécurité sanitaire de l'alimentation, de l'environnement et du travail (Anses). Elles peuvent être reproduites, obligatoirement avec la référence explicite à la source : \"Anses. 2025. Table de composition nutritionnelle des aliments Ciqual\". (Dataset licence: etalab 2.0.)"
 terms_checked = "2026-10-11"
-attribution = "Anses. 2025. Table de composition nutritionnelle des aliments Ciqual 2025. https://doi.org/10.57745/RDMHWY"
+attribution = "Anses. 2025. Table de composition nutritionnelle des aliments Ciqual 2025 (fichiers du 3 novembre 2025). https://doi.org/10.57745/RDMHWY"
 share_alike = false
 country = "FR"
 mirror = "git"

@@ -50,6 +50,10 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 Logger = Callable[[str], None]
 
+# Hosts the system resolver could not resolve, with the addresses found by the
+# fallback lookup.
+_FALLBACK_ADDRESSES: dict[str, list[str]] = {}
+
 
 class DownloadError(RuntimeError):
     """A file could not be downloaded or is missing in offline mode."""
@@ -134,11 +138,19 @@ def _create_connection(address: tuple[str, int], *args: object, **kwargs: object
         socket.gaierror: When neither the system resolver nor the fallback
             lookup can resolve the host.
     """
+    host, port = address
+    for ip in _FALLBACK_ADDRESSES.get(host, []):
+        try:
+            return socket.create_connection((ip, port), *args, **kwargs)
+        except OSError:
+            continue
     try:
         return socket.create_connection(address, *args, **kwargs)
     except socket.gaierror as error:
-        host, port = address
-        for ip in resolve_ipv4(host):
+        addresses = resolve_ipv4(host)
+        # Remembered for the rest of the run: the lookup can take seconds.
+        _FALLBACK_ADDRESSES[host] = addresses
+        for ip in addresses:
             try:
                 return socket.create_connection((ip, port), *args, **kwargs)
             except OSError:
