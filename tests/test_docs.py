@@ -15,7 +15,7 @@ from conftest import REPOSITORY
 
 from kratheos_food_data import cli, kratheos, schema, sqlite_export, versions
 from kratheos_food_data.config import Source
-from kratheos_food_data.service import api, settings
+from kratheos_food_data.service import api, foods, settings
 
 README = (REPOSITORY / "README.md").read_text(encoding="utf-8")
 API = (REPOSITORY / "docs" / "api.md").read_text(encoding="utf-8")
@@ -120,6 +120,9 @@ def test_api_reference_holds_the_contract_and_follows_the_code() -> None:
         assert f"`{field}`" in API, field
     assert f"`{versions.FLAG_VERSIONS_DISAGREE}`" in API
     assert f"`{versions.FLAG_VERSIONS_DISAGREE}`" in README
+    assert f"`{foods.FLAG_IN_STORE_BARCODE}`" in API
+    assert f"`{foods.FLAG_IN_STORE_BARCODE}`" in README
+    assert "`service/ranking.py`" in API and "ranking.py" in README
     for flag in (*schema.INFO_FLAGS, *schema.QUALITY_FLAGS):
         assert f"`{flag}`" in API, flag
     assert f"at most {api.MAX_USER_VERSIONS} versions proposed by users" in API

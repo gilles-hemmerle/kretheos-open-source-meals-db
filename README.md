@@ -418,8 +418,11 @@ counts fibre at 4 kcal/g or at 0 where a European one counts 2. Known cases
 the check cannot explain: vinegar and lemon juice (energy from organic
 acids), and CoFID sugars above 100 g (monosaccharide equivalents).
 
-The [service](#the-service) adds one flag of its own to a food record,
-`versions_disagree`, when the versions of a food give different values.
+The [service](#the-service) adds two flags of its own to a food record:
+`versions_disagree`, when the versions of a food give different values, and
+`in_store_barcode`, when its barcode is a number a shop puts on what it
+weighs or packs itself (GTIN-13 beginning with 02, 04 or 20 to 29, and the
+8-digit numbers beginning the same way).
 
 ## Barcodes
 
@@ -589,8 +592,20 @@ match hundreds of thousands of barcoded products, and ranking them is what
 takes a second, so with fewer than three letters or digits only the generic
 foods and the products without barcode are searched (160 000 foods): two
 letters are the beginning of a word, a single letter is a whole word. From
-the third letter on everything is searched, the foods of the country of the
-request first. [`docs/api.md`](docs/api.md#search) has the details.
+the third letter on everything is searched.
+
+The order of the results is made of rules a person can predict, with no list
+of foods. The generic foods of the food-composition tables (`kind=generic`)
+are all read and ordered on the words of their names: a name in the language
+of the request, a name that is or begins with the text typed ("Pomme, chair
+et peau, crue" for "pomme", before "Pomme de terre" and long before "Compote
+de pomme"), the table of the country, then raw and fresh forms before cooked
+ones, and dried, canned or pre-packed ones last. Products are ordered by
+country, name and number of scans; the numbers shops put on what they weigh
+and pack themselves (`in_store_barcode`, one food in ten) come after every
+other product, and are found by barcode as before. Without `kind`, the
+generic foods whose name is the text typed come first, then the products.
+[`docs/api.md`](docs/api.md#search) has the details.
 
 ### Its files
 
@@ -766,6 +781,7 @@ src/kratheos_food_data/
         live.py          the live database
         foods.py         a food from both, and its JSON record
         search.py        search in bounded time
+        ranking.py       the order of the reference foods, from their names
         validation.py    what a request may contain
         api.py           the endpoints
         httpd.py         the HTTP server

@@ -176,7 +176,8 @@ and never exports it.
 Each point says what the contract asks, what the data hold, and what is
 served.
 
-1. **`flags` are free strings of the build**, except `versions_disagree`:
+1. **`flags` are free strings of the build**, except the two the service
+   adds, `versions_disagree` and `in_store_barcode`:
    show them or test for one, never expect a closed list. They carry the
    names of the build, not those the contract gives as examples
    (`implausible_energy`, `carbs_converted`). Today the quality flags are `value_out_of_range`, `energy_out_of_range`,
@@ -185,7 +186,7 @@ served.
    `energy_from_kj`, `salt_from_sodium`, `alcohol_from_abv`, `basis_assumed`,
    `carbohydrate_fiber_subtracted`, `carbohydrate_includes_fiber`,
    `inexact_values`, `obsolete`, `barcode_invalid`, `barcode_restricted`.
-   The README describes each. `versions_disagree` is added by the service.
+   The README describes each.
 2. **`versions_disagree`** is set when at least two visible versions have
    the four values (energy, protein, carbohydrate, fat) and either do not use
    the same basis (100 g and 100 ml) or differ beyond the tolerance the build
@@ -193,38 +194,51 @@ served.
    macro by more than 2 g and 20 %. Versions that differ by the rounding of a
    label (539 and 541 kcal) do not raise it. It is a flag of the food record,
    never of a version.
-3. **`is_drink` false means "not known to be a drink"**, never "known not to
+3. **`in_store_barcode`** is set on a food whose barcode is a number a shop
+   puts on what it weighs or packs itself: a GTIN-13 beginning with 02, 04
+   or 20 to 29 (02 and 04 are the 12-digit UPC-A numbers beginning with 2
+   and 4), or an 8-digit number beginning the same way. Such a number names
+   another food in the next shop. About one food in ten carries it (380 000,
+   nearly all from Open Food Facts). The record is served like any other and
+   a lookup by barcode is unchanged; a search by name puts these foods after
+   every other product (see « Search »). It is a flag of the food record,
+   never of a version. The build has a wider flag on the record of the
+   source, `barcode_restricted`: the GS1 restricted circulation numbers,
+   which also hold every 8-digit number beginning with 0, the own-brand
+   products of a few retailers (Trader Joe's, Sainsbury's, Marks & Spencer,
+   Tesco), which rank like any product.
+4. **`is_drink` false means "not known to be a drink"**, never "known not to
    be one". The database holds three states (yes, no, unknown: 1.8 of 3.6
    million foods) and the contract a boolean. `drink=true` returns what a
    source classifies as a beverage, `drink=false` everything else.
-4. **`servings` holds at most one portion**, in every answer: a list of one
+5. **`servings` holds at most one portion**, in every answer: a list of one
    element, or empty. Every source gives at most one portion per record and
    the layer stores one per version. A request may send several: the first
    is kept, the others are ignored, and the answer shows what was kept. A record whose source words a portion without giving
    its size has none. When the source gives no label, the label is the size
    (`"30 g"`).
-5. **`updated_at` is a day**, written at midnight UTC: the sources and the
+6. **`updated_at` is a day**, written at midnight UTC: the sources and the
    layer store dates.
-6. **Alcohol.** `nutrients.alcohol_g` (grams per 100 g or 100 ml) is part
+7. **Alcohol.** `nutrients.alcohol_g` (grams per 100 g or 100 ml) is part
    of every food record and every version, `null` when unknown, and is
    accepted on `POST /v1/products` and `POST /v1/foods/{id}/versions`. The
    energy check counts it (7 kcal per gram): send it for alcoholic drinks,
    or their energy will not match their macros. On a write it may be left
    out, unlike the other nutrients: a version proposed without it keeps the
    alcohol the food is known with; an explicit `null` says it is unknown.
-7. **`name_origin`.** `kratheos` marks a name added with
+8. **`name_origin`.** `kratheos` marks a name added with
    `POST .../translations`. The names a product was created with in Kratheos
    are its own names: their origin is `source`, and they cannot be replaced
    either.
-8. **`id` of a product without barcode coming from a source** is
+9. **`id` of a product without barcode coming from a source** is
    `<source>:<id in the source>` too (`off:...`, `chain:...`,
    `usda:branded:...`), not only that of a generic food. No identifier is
    longer than 80 characters.
-9. **The build date** is not inside `food.sqlite` (two builds of the same
+10. **The build date** is not inside `food.sqlite` (two builds of the same
    inputs give the same file). `GET /v1/meta` reads it from the
    `manifest.json` kept next to the database, and falls back to the
    modification time of the file.
-10. **`brand` and `category`** are as the source writes them: a brand may
+11. **`brand` and `category`** are as the source writes them: a brand may
     list several names (`"Nutella, Ferrero"`), a category is the label of the
     source's own classification (`"en:hazelnut-spreads"`).
 
@@ -306,16 +320,61 @@ served.
   is normalised like `GET /v1/barcodes/{code}`). The barcodes beginning with
   the digits typed (from four digits on) and the names holding them are
   found too, in the order below.
-- **Order**: the barcode typed; the foods of `country` (the version served
-  lists it); a name equal to the text, then beginning with it, then the
-  rest; generic foods before products; the most scanned products; the
-  shortest name; the identifier.
-- **Depth.** A search ranks the best matches of the index (about 440 foods at
-  most) and pages through them: `next_offset` becomes `null` at the end of
-  that list, not at the end of the database. `offset` may not exceed 1000.
+- **Reference foods** (`kind=generic`). Every generic food matching is read
+  (they are 27 000, in a few blocks of the index) and put in an order made
+  of rules on the words of the names, with no list of foods
+  (`service/ranking.py`):
+  1. a name in the language of the request (`lang`) that matches, before a
+     food that only matches through another language;
+  2. a name that is, or begins with, the words typed, before a name that
+     only holds them;
+  3. the table of the `country` of the request;
+  4. how the name matches: the name is the text; its first part, before the
+     first comma or parenthesis, is the text ("Pomme, chair et peau, crue"
+     for "pomme"); the first part begins with the words typed ("Pomme de
+     terre", "Riz blanc, cru"); it begins with the text inside a longer word
+     ("Apfelsaft" for "apfel"); every word typed is a word of the name, in
+     any order ("Chicken, broilers or fryers, breast, meat only, raw" for
+     "chicken breast"); every word typed begins a word of the name. A plural
+     or a feminine is the same word ("Apples", "Eier"); a compound is not;
+  5. for a name that begins with the text, the fewest words in its first
+     part ("Lait entier, UHT" before "Lait fermenté à boire, nature");
+  6. plain before processed, from short lists of words in French, English,
+     German, Italian and Spanish: raw, fresh and unflavoured first; then the
+     names that say nothing; then cooked; last dried, powdered, canned,
+     pre-packed and baby food. A form word does not count in the first part
+     unless it was typed: "Oeuf cru" is the egg, like "Oeuf, cru";
+  7. the shortest name, then the identifier.
+
+  A language answers with the names the sources have: French and English
+  for every table that has them, German and Italian only in the Swiss table
+  (1 200 foods), Spanish nowhere. A text in a language without a name finds
+  the foods whose name in another language holds it ("arroz" finds the
+  English names of USDA that hold it, "manzana" nothing), and German
+  compounds are found from their beginning only ("Milch" finds
+  "Milchschokolade", not "Vollmilch").
+- **Products** (`kind=product`) are ordered by: the barcode typed; a barcode
+  that is not an in-store number before one that is; the foods of `country`
+  (the version served lists it); a name equal to the text, then beginning
+  with it, then the rest; the most scanned products; the shortest name; the
+  identifier.
+- **In-store barcodes** (flag `in_store_barcode`) come after every other
+  product. They are left out of what the index ranks: when 120 other
+  products match, those fill the answer and none of them is in it; when
+  fewer do, the first 20 the index finds are added at the very end. A
+  lookup by barcode, and a search by the digits of one, are not concerned.
+- **Without `kind`** both are searched. The reference foods whose name, or
+  first part, is the text typed come first, in the order of the reference
+  foods (40 at most: "pomme" has 37 of them in the five tables, "riz" 3);
+  everything else follows in the order of the products, generic foods
+  before products where that order does not tell them apart.
+- **Depth.** A search ranks the best matches of the index (a few hundred
+  foods at most, 200 for `kind=generic`) and pages through them:
+  `next_offset` becomes `null` at the end of that list, not at the end of
+  the database. `offset` may not exceed 1000.
 - **Time.** A search has a budget (`FOOD_DATA_SEARCH_BUDGET_MS`, 500 by
   default) for the full-text index. When it is spent the answer holds what
-  was found until then, generic foods and foods of the country first.
+  was found until then, reference foods and foods of the country first.
 - An empty `q`, or one without a letter or a digit, returns no item.
   `q` may not exceed 100 characters.
 
