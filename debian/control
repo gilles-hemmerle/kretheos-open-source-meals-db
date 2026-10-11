@@ -1,0 +1,52 @@
+Source: kratheos-food-data
+Section: web
+Priority: optional
+Maintainer: Gilles Hemmerlé <gilles.h@iabsis.com>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+# The Python environment shipped in the package is built with venv and pip
+# from requirements.txt (exact versions, verified by checksum).
+ python3 (>= 3.13),
+ python3-pip,
+ python3-venv,
+ ca-certificates,
+Standards-Version: 4.7.2
+Homepage: https://projects.iabsis.com/
+
+Package: kratheos-food-data
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+# The bundled environment runs on the system interpreter.
+ python3 (>= 3.13),
+# postinst creates the system user.
+ adduser,
+# Downloads of the sources and of a ready-made database go over HTTPS.
+ ca-certificates,
+Recommends:
+# The weekly export commits kratheos.sqlite in a clone of the repository, and
+# the monthly rebuild reads the source list and the stored originals from it.
+ git,
+Description: Kratheos food data - open food database and its HTTP service
+ Serves one food database over HTTP: search as a person types, lookup by
+ barcode, read by identifier, and the contributions of users (products
+ added, versions of the values and votes, names, reports), from a SQLite
+ database rebuilt from open food-composition sources (Open Food Facts, USDA
+ FoodData Central, Ciqual, the Swiss Food Composition Database, the Canadian
+ Nutrient File, CoFID).
+ .
+ One process and SQLite only. Reads need no authentication, writes need a
+ shared token; the service listens on 127.0.0.1 and is meant to sit behind
+ the application that authenticates people.
+ .
+ Two timers come with it: every week the public layer (kratheos.sqlite) is
+ exported from the live database and committed in a clone of the repository;
+ every month the main database is rebuilt, checked against the one being
+ served, and swapped in without stopping the service.
+ .
+ The package ships no data. The token and the secret used to hash
+ contributor keys are generated on first install in
+ /etc/kratheos-food-data/service.conf; data live in
+ /var/lib/kratheos-food-data.

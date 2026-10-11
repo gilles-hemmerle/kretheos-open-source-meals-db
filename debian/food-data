@@ -1,0 +1,32 @@
+#!/bin/sh
+# food-data, as installed by the Debian package: the command of the bundled
+# environment, run with the settings of the service and as its user.
+#
+# - the settings of /etc/kratheos-food-data/service.conf are exported, so that
+#   a command typed by hand works on the same files as the service. The file
+#   is read line by line (KEY=value), not sourced: values keep every character;
+# - root becomes the service user first, so that nothing under
+#   /var/lib/kratheos-food-data ends up owned by root;
+# - the repository is the clone in /var/lib/kratheos-food-data/repository
+#   unless --root says otherwise.
+
+set -e
+
+CONF=/etc/kratheos-food-data/service.conf
+USER_NAME=kratheos-food-data
+BIN=/usr/share/kratheos-food-data/venv/bin/food-data
+REPOSITORY=/var/lib/kratheos-food-data/repository
+
+if [ "$(id -u)" = 0 ]; then
+    exec runuser -u "$USER_NAME" -- "$0" "$@"
+fi
+
+if [ -r "$CONF" ]; then
+    while IFS='=' read -r key value; do
+        case "$key" in ''|'#'*|*[!A-Za-z0-9_]*) continue ;; esac
+        export "$key=$value"
+    done < "$CONF"
+fi
+
+cd /var/lib/kratheos-food-data 2>/dev/null || true
+exec "$BIN" --root "$REPOSITORY" "$@"

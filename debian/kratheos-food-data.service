@@ -1,0 +1,49 @@
+# kratheos-food-data.service - the HTTP service (food-data serve).
+# It reads /var/lib/kratheos-food-data/food.sqlite and reopens it when a
+# rebuild or an installation replaces it: nothing restarts the service then.
+
+[Unit]
+Description=Kratheos food data - HTTP service
+Documentation=file:///usr/share/doc/kratheos-food-data/api.md
+After=network.target
+# Bound the restart loop: at most 3 starts per 5 min, then stay failed.
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+User=kratheos-food-data
+Group=kratheos-food-data
+EnvironmentFile=/etc/kratheos-food-data/service.conf
+WorkingDirectory=/var/lib/kratheos-food-data
+# --root names the clone of the repository, when there is one: a new live
+# database takes over the kratheos.sqlite it holds.
+ExecStart=/usr/share/kratheos-food-data/venv/bin/food-data --root /var/lib/kratheos-food-data/repository serve
+Restart=on-failure
+RestartSec=15
+# Requests being answered finish before the process exits.
+TimeoutStopSec=30
+UMask=0027
+
+# Sandbox: the service reads its code and writes its data directory, nothing else.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/kratheos-food-data
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

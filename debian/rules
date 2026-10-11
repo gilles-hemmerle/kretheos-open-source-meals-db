@@ -1,0 +1,55 @@
+#!/usr/bin/make -f
+
+# Debian build rules for the kratheos-food-data package.
+# The work is done by the `install` target of the root Makefile, driven by
+# debhelper: a Python environment built from requirements.txt, the code
+# installed into it, the settings file and the data directory.
+
+%:
+	dh $@
+
+# The root Makefile builds the food database (`make`, `make build`), runs the
+# tests (`make test`) and removes work/ and dist/ (`make clean`): none of
+# that belongs to the build of the package.
+override_dh_auto_build:
+	echo "Nothing to build: the Python environment is made by make install"
+
+override_dh_auto_test:
+	echo "Tests run in development (make test)"
+
+override_dh_auto_clean:
+	echo "Nothing to clean"
+
+override_dh_auto_install:
+	$(MAKE) -j1 install DESTDIR=$(CURDIR)/debian/kratheos-food-data
+
+# The bundled environment under /usr/share/kratheos-food-data/venv must not be
+# touched by the usual binary-stripping and compression helpers.
+override_dh_dwz:
+	echo "Bypass dh_dwz"
+
+override_dh_strip:
+	dh_strip --exclude=/site-packages/
+
+override_dh_shlibdeps:
+	dh_shlibdeps --exclude=/site-packages/
+
+override_dh_strip_nondeterminism:
+	dh_strip_nondeterminism --exclude=/site-packages/
+
+# The documentation stays readable as it is.
+override_dh_compress:
+	dh_compress -X.md
+
+# Three units: the service, and two timers with the service each one starts.
+# The service is enabled and started; the timers are enabled and started; the
+# two jobs they run are never started by an installation or an upgrade (a
+# rebuild downloads 8 GB).
+override_dh_installsystemd:
+	dh_installsystemd --name=kratheos-food-data
+	dh_installsystemd --name=kratheos-food-data-export kratheos-food-data-export.timer
+	dh_installsystemd --name=kratheos-food-data-export --no-enable --no-start \
+		kratheos-food-data-export.service
+	dh_installsystemd --name=kratheos-food-data-rebuild kratheos-food-data-rebuild.timer
+	dh_installsystemd --name=kratheos-food-data-rebuild --no-enable --no-start \
+		kratheos-food-data-rebuild.service

@@ -1,0 +1,43 @@
+# kratheos-food-data-export.service - writes the public kratheos.sqlite from
+# the live database, commits it in the clone of the repository and pushes it
+# when the clone has a remote. Started by kratheos-food-data-export.timer.
+#
+# It does nothing until the clone exists:
+#   sudo -u kratheos-food-data git clone <repository> /var/lib/kratheos-food-data/repository
+# A push needs credentials of the service user (a deploy key in
+# /var/lib/kratheos-food-data/.ssh); without a remote nothing is pushed.
+
+[Unit]
+Description=Kratheos food data - weekly export of the Kratheos layer
+ConditionPathExists=/var/lib/kratheos-food-data/repository/.git
+ConditionPathExists=/var/lib/kratheos-food-data/live.sqlite
+
+[Service]
+Type=oneshot
+User=kratheos-food-data
+Group=kratheos-food-data
+EnvironmentFile=/etc/kratheos-food-data/service.conf
+Environment=HOME=/var/lib/kratheos-food-data
+WorkingDirectory=/var/lib/kratheos-food-data
+ExecStart=/usr/share/kratheos-food-data/venv/bin/food-data --root /var/lib/kratheos-food-data/repository export-layer --commit --push
+UMask=0027
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/kratheos-food-data
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=

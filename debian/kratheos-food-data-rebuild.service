@@ -1,0 +1,48 @@
+# kratheos-food-data-rebuild.service - exports the live database, rebuilds
+# food.sqlite from the open sources into a new file, compares it with the one
+# being served and swaps it in. A rebuild that loses a suspicious share of
+# records ends with status 2 and leaves the old file in place: the unit is
+# then "failed", which is the alert. Started by kratheos-food-data-rebuild.timer.
+#
+# It does nothing until the clone of the repository exists (it holds
+# sources.toml and the stored originals). The first run downloads about 9 GB
+# and needs 20 GB of free disk space under /var/lib/kratheos-food-data.
+
+[Unit]
+Description=Kratheos food data - monthly rebuild of the main database
+ConditionPathExists=/var/lib/kratheos-food-data/repository/sources.toml
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=kratheos-food-data
+Group=kratheos-food-data
+EnvironmentFile=/etc/kratheos-food-data/service.conf
+Environment=HOME=/var/lib/kratheos-food-data
+WorkingDirectory=/var/lib/kratheos-food-data
+ExecStart=/usr/share/kratheos-food-data/venv/bin/food-data --root /var/lib/kratheos-food-data/repository rebuild --min-free-gb 10
+# The first run downloads the originals; a build then takes a few minutes.
+TimeoutStartSec=12h
+Nice=10
+UMask=0027
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/kratheos-food-data
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=

@@ -1,0 +1,81 @@
+#!/bin/sh
+# postinst script for kratheos-food-data.
+#
+# - creates the system user and its data directory:
+#     /var/lib/kratheos-food-data   : service home and data (mode 750)
+# - fills the secrets left empty in /etc/kratheos-food-data/service.conf
+#   (FOOD_DATA_TOKEN, FOOD_DATA_KEY_SECRET) and restricts its mode. A value
+#   already there is never replaced: an upgrade keeps the token and, above
+#   all, the secret the contributor keys are hashed with.
+#
+# The package ships no data: the service starts without a database and
+# answers 503 until one is built or installed (see the message printed on
+# the first installation).
+#
+# See: dh_installdeb(1).
+
+set -e
+
+CONF=/etc/kratheos-food-data/service.conf
+PY=/usr/share/kratheos-food-data/venv/bin/python
+USER_NAME=kratheos-food-data
+DATA=/var/lib/kratheos-food-data
+
+# Replace "KEY=" (empty value) by "KEY=<generated>" in the settings file.
+fill_secret() {
+    key="$1"
+    value="$2"
+    if grep -q "^${key}=[[:space:]]*$" "$CONF"; then
+        sed -i "s|^${key}=[[:space:]]*$|${key}=${value}|" "$CONF"
+    fi
+}
+
+case "$1" in
+    configure)
+        if ! getent passwd "$USER_NAME" >/dev/null; then
+            adduser --system --group --home "$DATA" --no-create-home "$USER_NAME"
+        fi
+
+        mkdir -p "$DATA"
+        # Recursive chown only when something is not owned by the service user.
+        find "$DATA" ! -user "$USER_NAME" -exec chown "$USER_NAME:$USER_NAME" {} +
+        chmod 750 "$DATA"
+
+        if [ -f "$CONF" ]; then
+            # Restrict the file BEFORE any secret is written into it.
+            chown root:"$USER_NAME" "$CONF"
+            chmod 640 "$CONF"
+
+            # Generate into variables first: an empty secret must fail loudly.
+            token="$($PY -c 'import secrets; print(secrets.token_urlsafe(36))')"
+            key_secret="$($PY -c 'import secrets; print(secrets.token_urlsafe(36))')"
+            if [ -z "$token" ] || [ -z "$key_secret" ]; then
+                echo "kratheos-food-data: could not generate the secrets (FOOD_DATA_TOKEN / FOOD_DATA_KEY_SECRET)." >&2
+                exit 1
+            fi
+            fill_secret FOOD_DATA_TOKEN "$token"
+            fill_secret FOOD_DATA_KEY_SECRET "$key_secret"
+        fi
+
+        # "$2" holds the previously configured version: empty on a first install.
+        if [ -z "$2" ]; then
+            echo "kratheos-food-data: installed without data. Then, as $USER_NAME:"
+            echo "  either  git clone <repository> $DATA/repository"
+            echo "          and  systemctl start kratheos-food-data-rebuild  (downloads the sources, about 9 GB)"
+            echo "  or      food-data install-database --url <address of a published database>"
+            echo "  The token of the writes is FOOD_DATA_TOKEN in $CONF."
+        fi
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

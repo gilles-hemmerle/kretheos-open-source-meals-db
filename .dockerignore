@@ -1,0 +1,17 @@
+# What the image is not built from: the data (never in an image), the stored
+# originals, the development environment and the history.
+.git
+.venv
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+mirror
+release
+release-database
+work
+dist
+data
+sources
+tests
+debian

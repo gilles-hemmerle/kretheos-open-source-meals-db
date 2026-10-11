@@ -1,0 +1,13 @@
+# kratheos-food-data-rebuild.timer - the first Sunday of every month, the main
+# database is rebuilt. A run missed while the machine was off is caught up.
+
+[Unit]
+Description=Kratheos food data - monthly rebuild of the main database
+
+[Timer]
+OnCalendar=Sun *-*-1..7 02:00:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

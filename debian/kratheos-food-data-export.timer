@@ -1,0 +1,13 @@
+# kratheos-food-data-export.timer - every Monday, the public layer is exported
+# and committed. A run missed while the machine was off is caught up.
+
+[Unit]
+Description=Kratheos food data - weekly export of the Kratheos layer
+
+[Timer]
+OnCalendar=Mon *-*-* 03:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
