@@ -239,6 +239,15 @@ served.
   3. the most voted wins;
   4. a tie, or no vote: the order of the build (plausible values, complete
      macros, most recent, fixed source order, then the identifier).
+- **Countries decide before votes do.** A version that lists no country is
+  never the one served to a country another version lists, however many
+  votes it has: send `countries` with every version proposed (the country of
+  the person who proposes it, at least). The other way round, a country only
+  one version lists gets that version even when the votes, or the quality
+  checks, prefer another.
+- **Votes belong to the food, not to a country**: there is one count per
+  version, and the rule compares the counts of the versions left for the
+  request.
 - **The threshold** is `FOOD_DATA_USER_VERSION_VOTES` (3 by default), the
   same for the service and for the build, which records it in
   `meta.user_version_votes` of `food.sqlite`.
@@ -267,8 +276,9 @@ served.
   letter on, everything. This is what keeps a search within a fraction of a
   second: two letters match hundreds of thousands of barcoded products.
 - **Digits** are also a barcode: the food carrying it comes first (the text
-  is normalised like `GET /v1/barcodes/{code}`), then the barcodes beginning
-  with the digits typed (from four digits on), then the names holding them.
+  is normalised like `GET /v1/barcodes/{code}`). The barcodes beginning with
+  the digits typed (from four digits on) and the names holding them are
+  found too, in the order below.
 - **Order**: the barcode typed; the foods of `country` (the version served
   lists it); a name equal to the text, then beginning with it, then the
   rest; generic foods before products; the most scanned products; the
