@@ -1,0 +1,72 @@
+LICENCE OF THE DATA
+===================
+
+1. The database built by this repository
+----------------------------------------
+
+The aggregated food database built by this repository (the files written to
+dist/: food.sqlite, the Parquet, CSV and JSON Lines files, the identifier
+list) is made available under the Open Database License:
+https://opendatacommons.org/licenses/odbl/1-0/. Any rights in individual
+contents of the database are licensed under the Database Contents License:
+https://opendatacommons.org/licenses/dbcl/1-0/.
+
+Why this licence: the database contains data from Open Food Facts, which is
+published under the Open Database License. That licence is share-alike: a
+database derived from it must be offered under the same licence. In short,
+you are free to copy, distribute, use, modify and build upon the database, for
+any purpose including commercial, as long as you:
+
+  - attribute: credit the database and its sources (see ATTRIBUTION), and make
+    clear to others the licence of the database;
+  - share alike: if you publicly use an adapted version of the database, offer
+    that adapted database under the Open Database License too;
+  - keep open: if you redistribute the database with technical restrictions
+    (DRM), also redistribute a version without them.
+
+This summary is not the licence; the text at the address above is.
+
+2. Records of each source inside the database
+---------------------------------------------
+
+Every record carries the licence of its source in its `licence` column, and
+the table `sources` of food.sqlite (also dist/manifest.json) gives the full
+name of that licence, its address and the attribution to reproduce:
+
+  off      Open Food Facts           ODbL 1.0 (database), DbCL 1.0 (contents)
+  usda     USDA FoodData Central     CC0 1.0 (public domain)
+  ciqual   Ciqual (Anses)            Licence Ouverte / Open Licence 2.0 (Etalab)
+  swiss    Swiss Food Composition    opendata.swiss terms "Open use. Must
+           Database (FSVO)           provide the source."
+  cnf      Canadian Nutrient File    Open Government Licence - Canada
+  cofid    CoFID (United Kingdom)    Open Government Licence v3.0
+  kratheos Kratheos and its users    ODbL 1.0
+
+The files dist/generic_foods.* hold no record of Open Food Facts: someone who
+takes only the records of one of the other sources from them may reuse those
+records under the licence of that source alone, with its attribution.
+
+3. The source files stored in this repository
+---------------------------------------------
+
+The files under sources/ (and those of mirror/ attached to releases) are the
+publishers' own files, stored exactly as downloaded. Each remains under the
+licence of its publisher, listed above and in sources.toml together with the
+sentence of the publisher that allows redistribution. Next to every file, a
+.meta.json sidecar records where and when it was downloaded and its checksums.
+
+4. kratheos.sqlite
+------------------
+
+The Kratheos layer (products, corrections, confirmation counts and
+translations contributed through Kratheos) is part of the database above and
+is made available under the same Open Database License. It holds no personal
+data: no account, no handle, no identifier of a person.
+
+5. No warranty
+--------------
+
+The data are provided as they are, without warranty of any kind. Nutrition
+values come from publishers and from product labels entered by volunteers;
+records that fail a plausibility check are flagged, not corrected. Do not rely
+on them for medical decisions.

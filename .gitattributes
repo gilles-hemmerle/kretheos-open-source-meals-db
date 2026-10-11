@@ -1,0 +1,8 @@
+# The stored source files must come out of git byte for byte as they went in:
+# their checksums are recorded and verified. No end-of-line conversion,
+# whatever the settings of the machine, and no text diff of the data files.
+sources/** -text
+sources/**/*.xml -text -diff
+sources/**/*.xlsx binary
+sources/**/*.zip binary
+*.sqlite binary

@@ -1,0 +1,55 @@
+ATTRIBUTION
+===========
+
+The database built by this repository contains data from the sources below.
+Anyone who publishes the database, a part of it, or something produced from
+it must reproduce these credits. The same texts are in sources.toml, in
+dist/manifest.json and in the table `sources` of dist/food.sqlite.
+
+A short form for an application's "About" screen:
+
+    Food data: Open Food Facts (ODbL), USDA FoodData Central, Ciqual (Anses),
+    Swiss Food Composition Database (FSVO), Canadian Nutrient File (Health
+    Canada), CoFID (UK). Database made available under the Open Database
+    License.
+
+with links to https://openfoodfacts.org and to the licence,
+https://opendatacommons.org/licenses/odbl/1-0/. Open Food Facts also asks
+that a record of a product links to its page, which is the `source_url` of
+the record.
+
+Open Food Facts
+---------------
+Contains data from Open Food Facts (https://openfoodfacts.org), available under the Open Database License (ODbL) 1.0; individual contents under the Database Contents License (DbCL) 1.0.
+Licence: https://opendatacommons.org/licenses/odbl/1-0/
+Terms: https://world.openfoodfacts.org/terms-of-use
+
+USDA FoodData Central
+---------------------
+U.S. Department of Agriculture, Agricultural Research Service. FoodData Central, 2026. fdc.nal.usda.gov.
+Licence: public domain, CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
+(No attribution is required; USDA asks to be named as the source.)
+
+Ciqual French food composition table
+------------------------------------
+Anses. 2025. Table de composition nutritionnelle des aliments Ciqual 2025 (fichiers du 3 novembre 2025). https://doi.org/10.57745/RDMHWY
+Licence: Licence Ouverte / Open Licence 2.0 (Etalab), https://spdx.org/licenses/etalab-2.0.html
+
+Swiss Food Composition Database
+-------------------------------
+Federal Food Safety and Veterinary Office FSVO, Swiss Food Composition Database, version 7.1, https://naehrwertdaten.ch/
+Terms: "Open use. Must provide the source." https://opendata.swiss/en/terms-of-use
+
+Canadian Nutrient File
+----------------------
+Health Canada, Canadian Nutrient File, 2026. Contains information licensed under the Open Government Licence - Canada.
+Licence: https://open.canada.ca/en/open-government-licence-canada
+
+McCance and Widdowson's The Composition of Foods Integrated Dataset (CoFID)
+---------------------------------------------------------------------------
+Public Health England, McCance and Widdowson's The Composition of Foods Integrated Dataset 2021. Contains public sector information licensed under the Open Government Licence v3.0.
+Licence: https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+
+Kratheos
+--------
+Contains data added by the users of Kratheos, available under the Open Database License (ODbL) 1.0.
