@@ -219,6 +219,23 @@ def test_an_empty_live_database_does_not_empty_the_layer(service: Running, tmp_p
     with pytest.raises(FileNotFoundError):
         export.export_layer(tmp_path / "absent.sqlite", layer)
 
+    # A live database that holds much less than the layer does not shrink it either.
+    full = tmp_path / "full.sqlite"
+    kratheos.create_database(full)
+    database = sqlite3.connect(full)
+    database.executemany(
+        "INSERT INTO translations VALUES (?, 'de', 'Name', 'human', '2026-10-11')",
+        [(f"ciqual:{number}",) for number in range(12)],
+    )
+    database.commit()
+    database.close()
+    with pytest.raises(export.ExportRefused, match="12 translations and the export would leave 1"):
+        export.export_layer(service.settings.live, full)
+    assert len(kratheos.read_layer(full).translations) == 12
+    # Once the layer is taken over, the export holds both and goes through.
+    assert service.store.import_layer(kratheos.read_layer(full))["translations"] == 12
+    assert export.export_layer(service.settings.live, full)["translations"] == 13
+
 
 def test_whole_loop_export_rebuild_swap(service: Running) -> None:
     """After a rebuild the same identifiers answer the same, nothing twice, nothing lost."""

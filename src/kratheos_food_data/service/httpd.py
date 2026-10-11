@@ -27,6 +27,7 @@ from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .. import __version__, kratheos
+from . import live
 from .api import Api, Response, error_response
 from .catalogue import Catalogue, DatabaseUnavailable
 from .live import LiveStore
@@ -242,12 +243,28 @@ def open_service(settings: Settings, log: Logger = log_line) -> tuple[Api, Catal
     """
     store = LiveStore(settings.live, settings.key_secret)
     catalogue = Catalogue(settings.database, settings.readers, log)
+    layer = kratheos.read_layer(settings.layer) if settings.layer else kratheos.Layer()
     if store.created:
         log(f"created the live database {settings.live}")
-        layer = kratheos.read_layer(settings.layer) if settings.layer else kratheos.Layer()
         if layer.rows:
             added = store.import_layer(layer)
             log(f"took over {settings.layer}: {added}")
+    elif layer.rows:
+        reader = store.reader()
+        try:
+            held = live.counts(reader)
+        finally:
+            reader.close()
+        lacking = [
+            name
+            for name in ("products", "versions", "translations")
+            if held[name] < len(getattr(layer, name))
+        ]
+        if lacking:
+            log(
+                f"warning: {settings.layer} holds more {', '.join(lacking)} than the live"
+                " database: take it over (food-data import-layer) before the next export"
+            )
     try:
         generation = catalogue.current()
     except DatabaseUnavailable:

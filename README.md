@@ -627,7 +627,9 @@ attached to it, a hidden version with its votes). Votes are counts. The same
 live data gives the same file, byte for byte, so a week without a change
 gives no commit; `--commit` commits that file only, whatever else changed in
 the repository. An export refuses to replace a layer that holds data by an
-empty one, which is what a lost live database would do.
+empty one, or by one with a fifth fewer products, versions or names
+(`--force` to do it anyway): that is what a live database that lost its data,
+or never took the layer over, would do.
 
 ### The periodic rebuild
 
@@ -678,6 +680,7 @@ rebuild on the first Sunday of the month. The package ships no data:
 
 ```sh
 sudo -u kratheos-food-data git clone <this repository> /var/lib/kratheos-food-data/repository
+sudo food-data import-layer                            # takes over the layer of the clone
 sudo systemctl start kratheos-food-data-rebuild        # builds from the sources (9 GB), or:
 sudo food-data install-database --url https://example.org/food/v1
 ```

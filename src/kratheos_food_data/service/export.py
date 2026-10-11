@@ -16,6 +16,11 @@ created anew, rows are written in the order of their identifiers in a single
 transaction, and its date (`exported_at`) is the time of the latest entry of
 the live database rather than the time of the export. An export of a live
 database that holds nothing is the empty file `kratheos-init` creates.
+
+An export never quietly shrinks the layer: it is refused when the live
+database holds nothing, or a fifth fewer products, versions or names than
+the file it would replace. That is what a live database that lost its data,
+or never took a published layer over, would do.
 (Byte for byte holds for one version of the SQLite library, which writes its
 own version number in the header of the files it creates.)
 
@@ -39,6 +44,11 @@ from . import live
 
 Logger = Callable[[str], None]
 FALLBACK_AUTHOR = ("kratheos-food-data", "kratheos-food-data@localhost")
+# An export that drops more than this share of the products, of the versions
+# or of the names of the layer it replaces is refused: moderation hides a few
+# records, a live database that lost its data hides most of them.
+MAX_SHRINK = 0.20
+MIN_ROWS_TO_JUDGE = 10
 GIT_TIMEOUT_SECONDS = 300
 
 
@@ -216,20 +226,31 @@ def export_layer(live_path: Path, out: Path, force: bool = False) -> dict:
         whether the file changed.
 
     Raises:
-        ExportRefused: When the live database holds nothing while the file
-            to replace holds data, which looks like a lost live database.
+        ExportRefused: When the live database holds nothing, or far less
+            than the file to replace, which looks like a live database that
+            lost its data or never took the layer over.
         FileNotFoundError: When there is no live database.
     """
     layer = read_live(live_path)
     before = hash_file(out)[0] if out.exists() else None
-    if not layer.rows and out.exists() and not force:
+    if out.exists() and not force:
         previous = kratheos.read_layer(out)
-        if previous.rows:
+        advice = (
+            " Import the layer into the live database (food-data import-layer) if it was"
+            " never taken over, or export with --force if this is what you want"
+        )
+        if previous.rows and not layer.rows:
             raise ExportRefused(
-                f"{live_path} holds nothing while {out} holds {previous.rows} rows: not replaced."
-                f" Import the layer into the live database (food-data import-layer), or"
-                f" export with --force to empty it"
+                f"{live_path} holds nothing while {out} holds {previous.rows} rows: not"
+                f" replaced.{advice}"
             )
+        for table in ("products", "versions", "translations"):
+            had, has = len(getattr(previous, table)), len(getattr(layer, table))
+            if had >= MIN_ROWS_TO_JUDGE and has < had * (1 - MAX_SHRINK):
+                raise ExportRefused(
+                    f"{out} holds {had} {table} and the export would leave {has}: more than"
+                    f" {MAX_SHRINK:.0%} fewer, not replaced.{advice}"
+                )
     write_layer(layer, out)
     kratheos.read_layer(out)  # the file written must be one the build accepts
     after = hash_file(out)[0]

@@ -59,11 +59,12 @@ case "$1" in
 
         # "$2" holds the previously configured version: empty on a first install.
         if [ -z "$2" ]; then
-            echo "kratheos-food-data: installed without data. Then, as $USER_NAME:"
-            echo "  either  git clone <repository> $DATA/repository"
-            echo "          and  systemctl start kratheos-food-data-rebuild  (downloads the sources, about 9 GB)"
-            echo "  or      food-data install-database --url <address of a published database>"
-            echo "  The token of the writes is FOOD_DATA_TOKEN in $CONF."
+            echo "kratheos-food-data: installed without data. Then:"
+            echo "  either  food-data install-database --url <address of a published database>"
+            echo "  or      runuser -u $USER_NAME -- git clone <repository> $DATA/repository"
+            echo "          food-data import-layer"
+            echo "          systemctl start kratheos-food-data-rebuild   (downloads the sources, about 9 GB)"
+            echo "  The timers need the clone; the token of the writes is FOOD_DATA_TOKEN in $CONF."
         fi
     ;;
 
