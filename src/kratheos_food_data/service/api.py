@@ -138,6 +138,11 @@ class Api:
         self.store = store
         self._live_readers: queue.LifoQueue = queue.LifoQueue()
         self._writing = threading.Lock()
+        # Measured on the real database: inside one process, the full-text
+        # index answers fewer searches per second with eight threads than
+        # with two. So a few searches are ranked at a time and the others
+        # wait their turn; lookups by barcode or identifier never wait.
+        self._searching = threading.BoundedSemaphore(max(1, settings.searches))
 
     def close(self) -> None:
         """Close the connections the endpoints kept open."""
@@ -394,7 +399,7 @@ class Api:
         text = query.get("q", "")
         if len(text) > search.MAX_QUERY_CHARS:
             raise invalid(f"q must have at most {search.MAX_QUERY_CHARS} characters")
-        with self._context() as context:
+        with self._searching, self._context() as context:
             found = search.search(
                 context,
                 text,

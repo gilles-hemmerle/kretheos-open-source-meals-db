@@ -57,6 +57,8 @@ class Settings:
             served instead of a record of a source.
         layer: `kratheos.sqlite` a new live database is filled from, if any.
         readers: Number of connections kept on the main database.
+        searches: Number of searches ranked at the same time; the others
+            wait their turn.
         max_body_bytes: Largest request body accepted.
         search_budget_seconds: Time a search may spend in the full-text
             index before it answers with what it has found.
@@ -71,6 +73,7 @@ class Settings:
     user_version_votes: int = DEFAULT_USER_VERSION_VOTES
     layer: Path | None = None
     readers: int = 8
+    searches: int = 3
     max_body_bytes: int = 64 * 1024
     search_budget_seconds: float = 0.5
 
@@ -215,6 +218,7 @@ def load_settings(
     budget = _integer(
         "FOOD_DATA_SEARCH_BUDGET_MS", environment.get("FOOD_DATA_SEARCH_BUDGET_MS", "500"), 50, 5000
     )
+    searches = _integer("FOOD_DATA_SEARCHES", environment.get("FOOD_DATA_SEARCHES", "3"), 1, 64)
     return Settings(
         database=path_setting(database, "FOOD_DATA_DATABASE", directory / DATABASE_NAME),
         live=live_path,
@@ -225,4 +229,6 @@ def load_settings(
         user_version_votes=user_version_votes,
         layer=layer,
         search_budget_seconds=budget / 1000,
+        searches=searches,
+        readers=max(8, searches + 4),
     )

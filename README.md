@@ -620,6 +620,7 @@ those of the live database alone: nothing is counted twice.
 | `FOOD_DATA_HOST`, `FOOD_DATA_PORT` | `--host`, `--port` | `127.0.0.1`, `8750` | Where to listen |
 | `FOOD_DATA_USER_VERSION_VOTES` | `--user-version-votes` | 3 | Votes a user's version needs to be served instead of a source; also read by the build |
 | `FOOD_DATA_SEARCH_BUDGET_MS` | | 500 | Time a search may spend in the index |
+| `FOOD_DATA_SEARCHES` | | 3 | Searches ranked at the same time; the others wait their turn |
 
 ### The weekly export
 
