@@ -316,19 +316,40 @@ def _git(repository: Path, *arguments: str, check: bool = True) -> subprocess.Co
         The finished process, with its output as text.
 
     Raises:
-        RuntimeError: When git fails and `check` is set.
+        RuntimeError: When git fails and `check` is set, or does not finish
+            in time (a remote that never answers).
     """
-    process = subprocess.run(  # noqa: S603 - fixed program, arguments passed as a list
-        ["git", "-C", str(repository), *arguments],  # noqa: S607
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT_SECONDS,
-        check=False,
-    )
+    try:
+        process = subprocess.run(  # noqa: S603 - fixed program, arguments passed as a list
+            ["git", "-C", str(repository), *arguments],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(
+            f"git {' '.join(arguments)} did not finish in {GIT_TIMEOUT_SECONDS} s"
+        ) from error
     if check and process.returncode != 0:
         detail = (process.stderr or process.stdout).strip()
         raise RuntimeError(f"git {' '.join(arguments)} failed: {detail}")
     return process
+
+
+def _waiting(repository: Path) -> int:
+    """Count the commits of the branch that its remote does not have yet.
+
+    Args:
+        repository: Directory of the repository.
+
+    Returns:
+        The number of commits ahead of the upstream branch as the last
+        exchange with the remote left it; 0 when the branch has no upstream.
+    """
+    process = _git(repository, "rev-list", "--count", "@{upstream}..HEAD", check=False)
+    count = process.stdout.strip()
+    return int(count) if process.returncode == 0 and count.isdigit() else 0
 
 
 def commit_layer(path: Path, summary: dict, push: bool = False, log: Logger = print) -> str:
@@ -336,7 +357,9 @@ def commit_layer(path: Path, summary: dict, push: bool = False, log: Logger = pr
 
     Nothing else is committed, whatever else changed or is staged. Without a
     change there is no commit. A push is only done when asked for and when
-    the repository has a remote.
+    the repository has a remote. A push that fails leaves the commit in
+    place and raises: the next run pushes what is waiting, even when it has
+    nothing new to commit.
 
     Args:
         path: Path of the `kratheos.sqlite` that was written.
@@ -345,18 +368,26 @@ def commit_layer(path: Path, summary: dict, push: bool = False, log: Logger = pr
         log: Function receiving what happens.
 
     Returns:
-        `committed`, `unchanged`, `committed and pushed` or `committed, no
-        remote to push to`.
+        `committed`, `unchanged`, `unchanged, pushed what was waiting`,
+        `committed and pushed` or `committed, no remote to push to`.
 
     Raises:
-        RuntimeError: When the file is not in a git repository or git fails.
+        RuntimeError: When the file is not in a git repository or git fails,
+            a push that fails included.
     """
     top = _git(path.parent, "rev-parse", "--show-toplevel").stdout.strip()
     repository = Path(top)
     relative = str(path.resolve().relative_to(repository.resolve()))
     if not _git(repository, "status", "--porcelain", "--", relative).stdout.strip():
         log(f"{relative} did not change: nothing to commit")
-        return "unchanged"
+        waiting = _waiting(repository) if push else 0
+        if not waiting:
+            return "unchanged"
+        # An earlier run committed and could not push: the remote was away or
+        # refused. Nothing would say so again if this run stopped here.
+        _git(repository, "push", "--quiet")
+        log(f"pushed the {waiting} commit(s) an earlier run could not push")
+        return "unchanged, pushed what was waiting"
     identity = []
     if not _git(repository, "config", "user.email", check=False).stdout.strip():
         identity = [

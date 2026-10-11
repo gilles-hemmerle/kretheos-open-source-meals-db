@@ -770,6 +770,14 @@ empty one, or by one with a fifth fewer products, versions, names or
 portions (`--force` to do it anyway): that is what a live database that lost its data,
 or never took the layer over, would do.
 
+`--push` does nothing in a repository without a remote. With one, a push
+that fails (the remote away, credentials refused) ends the command with an
+error (status 1) and leaves the commit in place; the next run pushes what is
+waiting, even when it has nothing new to commit. The commit is made under
+the git identity of whoever runs the command (`user.name` and `user.email`
+of the clone or of the account), else as `kratheos-food-data
+<kratheos-food-data@localhost>`.
+
 ### The periodic rebuild
 
 ```sh

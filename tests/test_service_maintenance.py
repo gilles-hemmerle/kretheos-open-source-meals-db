@@ -598,6 +598,59 @@ def test_export_is_committed_alone_with_a_dated_message(
     )
 
 
+def test_a_push_that_failed_is_done_by_the_next_run(
+    service: Running, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A remote that is away fails the command and keeps the commit, pushed once it is back.
+
+    The remote is a bare repository on the file system, and every push is a
+    real one: this is what the weekly timer of the package runs.
+    """
+    # No identity of the machine: the commits of the export get the fallback one.
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    git(seed, "init", "--quiet", "--initial-branch", "main")
+    kratheos.create_database(seed / "kratheos.sqlite")
+    git(seed, "add", "kratheos.sqlite")
+    git(seed, "-c", "user.name=A Test", "-c", "user.email=test@example.org", "commit", "-qm", "1")
+    remote, away, clone = tmp_path / "remote.git", tmp_path / "away.git", tmp_path / "clone"
+    git(seed, "clone", "--quiet", "--bare", str(seed), str(remote))
+    git(seed, "clone", "--quiet", str(remote), str(clone))
+
+    write_through_the_api(service)
+    live = str(service.settings.live)
+    arguments = ["--root", str(clone), "export-layer", "--live", live, "--commit", "--push"]
+    assert cli.main(arguments) == 0
+    assert git(remote, "rev-parse", "main") == git(clone, "rev-parse", "HEAD")
+    assert git(remote, "rev-list", "--count", "main") == "2"
+    author = "kratheos-food-data <kratheos-food-data@localhost>"
+    assert git(remote, "log", "-1", "--format=%an <%ae>", "main") == author
+
+    # The remote is away: the command fails, the commit stays in the clone.
+    remote.rename(away)
+    service.post("/v1/products", dict(PRODUCT, names={"fr": "Un produit de plus"}))
+    assert cli.main(arguments) == 1
+    assert git(clone, "rev-list", "--count", "HEAD") == "3"
+    assert git(clone, "rev-list", "--count", "origin/main..HEAD") == "1"
+    assert git(clone, "status", "--porcelain") == ""
+    # Nothing new the week after and the remote still away: it fails again,
+    # the commit that waits is not forgotten behind an "unchanged".
+    assert cli.main(arguments) == 1
+    assert git(clone, "rev-list", "--count", "HEAD") == "3"
+
+    # The remote is back: the run that has nothing to commit pushes what waits.
+    away.rename(remote)
+    assert cli.main(arguments) == 0
+    assert git(remote, "rev-parse", "main") == git(clone, "rev-parse", "HEAD")
+    assert git(remote, "rev-list", "--count", "main") == "3"
+    assert git(clone, "rev-list", "--count", "origin/main..HEAD") == "0"
+    # And then there is nothing left to do.
+    assert cli.main(arguments) == 0
+    assert git(remote, "rev-list", "--count", "main") == "3"
+
+
 def test_import_layer_only_adds_what_is_missing(service: Running, tmp_path: Path) -> None:
     """Taking a layer over twice, or over live data, changes nothing that is there."""
     ids = write_through_the_api(service)
