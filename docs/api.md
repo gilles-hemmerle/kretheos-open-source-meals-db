@@ -48,7 +48,8 @@ repository `kratheos-food-data`; the Kratheos backend is its only client in prod
   "is_drink": false,
   "nutrients": {
     "kcal": 539, "protein_g": 6.3, "carbs_g": 57.5, "sugars_g": 56.3,
-    "fat_g": 30.9, "saturated_fat_g": 10.6, "fibre_g": null, "salt_g": 0.107
+    "fat_g": 30.9, "saturated_fat_g": 10.6, "fibre_g": null, "salt_g": 0.107,
+    "alcohol_g": null
   },
   "servings": [{"label": "15 g", "amount": 15, "unit": "g"}],
   "source": {"id": "off", "title": "Open Food Facts", "licence": "ODbL-1.0", "url": "https://..."},
@@ -105,14 +106,23 @@ served.
   `kratheos:v:<uuid>` for a version proposed by a user (`origin` `user`, source `kratheos`).
 - One vote per person and per food: voting again moves the vote. Proposing a version puts
   its author's vote on it.
-- Which version is served to a request:
-  1. the candidates are every visible version of the food; when the request gives a
-     `country` and at least one version lists it, only those versions;
-  2. the candidate with the most votes wins, except that a `user` version needs at least
-     3 votes (a setting of the service) to be served instead of a `source` version;
-  3. a tie, or no vote at all: the order of the build (plausible values, complete macros,
-     most recent, fixed source order).
+- Which version is served to a request (a version is "usable" when its values are plausible
+  and it has the four macros):
+  1. threshold: a `user` version with fewer than 3 votes (a setting of the service) is left
+     out when the food has at least one usable `source` version; when no source version is
+     usable, every user version counts;
+  2. country: when the request gives a `country` and at least one candidate listing it is
+     usable (or no candidate at all is usable), the candidates listing other countries are
+     dropped; those listing the country or no country at all stay;
+  3. order among the candidates, first wins: most votes; plausible values; complete macros;
+     lists the country asked; a source version before a user version; among sources the most
+     recent, then the fixed source order; among user versions the oldest.
 - `served` marks, in a list of versions, the one this request gets.
+- `nutrients.alcohol_g` (grams per 100 g or 100 ml, null when unknown) is part of every
+  record and version and is accepted on writes; the energy check of the writes counts it.
+- `is_drink` false means "not known to be a drink". `flags` are free strings of the build,
+  except `versions_disagree`. `servings` holds at most one portion.
+- The service refuses unknown fields and unknown query parameters (422).
 
 ### Read endpoints
 
@@ -166,9 +176,10 @@ and never exports it.
 Each point says what the contract asks, what the data hold, and what is
 served.
 
-1. **`flags` carries the names of the build**, not those the contract gives
-   as examples (`implausible_energy`, `carbs_converted`). The quality flags
-   are `value_out_of_range`, `energy_out_of_range`,
+1. **`flags` are free strings of the build**, except `versions_disagree`:
+   show them or test for one, never expect a closed list. They carry the
+   names of the build, not those the contract gives as examples
+   (`implausible_energy`, `carbs_converted`). Today the quality flags are `value_out_of_range`, `energy_out_of_range`,
    `sugars_exceed_carbohydrate`, `saturated_exceed_fat`,
    `macros_sum_over_100`, `energy_macro_mismatch`; the informational ones
    `energy_from_kj`, `salt_from_sodium`, `alcohol_from_abv`, `basis_assumed`,
@@ -182,24 +193,25 @@ served.
    macro by more than 2 g and 20 %. Versions that differ by the rounding of a
    label (539 and 541 kcal) do not raise it. It is a flag of the food record,
    never of a version.
-3. **`is_drink` is `false` when the source does not say.** The database
-   holds three states (yes, no, unknown: 1.8 of 3.6 million foods); the
-   contract has a boolean. `drink=true` returns what a source classifies as
-   a beverage, `drink=false` everything else.
-4. **`servings` holds at most one portion.** Every source gives at most one
-   portion per record and the layer stores one per version. A request may
-   send several: the first is kept, the others are ignored, and the answer
-   shows what was kept. A record whose source words a portion without giving
+3. **`is_drink` false means "not known to be a drink"**, never "known not to
+   be one". The database holds three states (yes, no, unknown: 1.8 of 3.6
+   million foods) and the contract a boolean. `drink=true` returns what a
+   source classifies as a beverage, `drink=false` everything else.
+4. **`servings` holds at most one portion**, in every answer: a list of one
+   element, or empty. Every source gives at most one portion per record and
+   the layer stores one per version. A request may send several: the first
+   is kept, the others are ignored, and the answer shows what was kept. A record whose source words a portion without giving
    its size has none. When the source gives no label, the label is the size
    (`"30 g"`).
 5. **`updated_at` is a day**, written at midnight UTC: the sources and the
    layer store dates.
-6. **Alcohol.** `nutrients` has the eight values of the contract and no
-   alcohol, but the energy check needs it: without it every wine would be
-   refused as implausible. `POST /v1/products` and
-   `POST /v1/foods/{id}/versions` accept an optional `nutrients.alcohol_g`
-   (grams per 100 g or 100 ml). A version proposed without it keeps the
-   alcohol the food is known with. Alcohol is never part of an answer.
+6. **Alcohol.** `nutrients.alcohol_g` (grams per 100 g or 100 ml) is part
+   of every food record and every version, `null` when unknown, and is
+   accepted on `POST /v1/products` and `POST /v1/foods/{id}/versions`. The
+   energy check counts it (7 kcal per gram): send it for alcoholic drinks,
+   or their energy will not match their macros. On a write it may be left
+   out, unlike the other nutrients: a version proposed without it keeps the
+   alcohol the food is known with; an explicit `null` says it is unknown.
 7. **`name_origin`.** `kratheos` marks a name added with
    `POST .../translations`. The names a product was created with in Kratheos
    are its own names: their origin is `source`, and they cannot be replaced
@@ -228,25 +240,40 @@ served.
   entered in Kratheos (source `kratheos`): a version proposed by a user
   (`kratheos:v:<uuid>`) and the values a product was created with
   (`kratheos:<uuid>`). Creating a product puts its author's vote on it.
-- **The rule**, as `versions.choose_served` applies it:
-  1. a `user` version with fewer votes than the threshold is set aside as
-     long as the food has a visible `source` version. This comes first, so
-     that such a version is never served instead of a source, even to the
-     only country that lists it. A food no source knows has only `user`
-     versions: they all count;
-  2. when the request gives a `country` and at least one of the versions
-     left lists it, only those are considered;
-  3. the most voted wins;
-  4. a tie, or no vote: the order of the build (plausible values, complete
-     macros, most recent, fixed source order, then the identifier).
-- **Countries decide before votes do.** A version that lists no country is
-  never the one served to a country another version lists, however many
-  votes it has: send `countries` with every version proposed (the country of
-  the person who proposes it, at least). The other way round, a country only
-  one version lists gets that version even when the votes, or the quality
-  checks, prefer another.
+- **The rule**, as `versions.choose_served` applies it. A version is
+  "usable" when its values are plausible (no quality flag) and it has the
+  four macros (energy, protein, carbohydrate, fat).
+  1. *Threshold.* A `user` version with fewer votes than the threshold is
+     left out when the food has at least one usable `source` version. This
+     comes before the country, so that such a version is never served
+     instead of a usable source, even to the only country that lists it.
+     When no `source` version is usable (there is none, or all are
+     implausible or incomplete), every `user` version counts: one person's
+     plausible entry replaces values the build itself flags.
+  2. *Country.* When the request gives a `country`, the candidates that list
+     other countries are dropped; those that list the country, or no country
+     at all, stay. This only happens when at least one candidate listing the
+     country is usable, or when no candidate at all is usable: a country
+     never trades usable values for values that are not. It does not happen
+     either when it would leave no candidate (nothing is usable and every
+     version lists other countries): then all of them stay.
+  3. *Order among the candidates*, the first wins: the most votes; plausible
+     values; complete macros; listing the country asked for; a `source`
+     version before a `user` version; then, among `source` versions, the
+     most recent, the fixed source order and the identifier, and among
+     `user` versions the oldest and the identifier.
+- **What follows from the order.** A `user` version needs strictly more
+  votes than a `source` version to pass it, and a later proposal strictly
+  more votes than an earlier one. One vote is enough to switch between two
+  `source` versions. Dates are days: two proposals of the same day are
+  ordered by their identifier, which does not change.
+- **Versions without a country.** A version that lists no country is not
+  taken to be "elsewhere": it stays a candidate for every country, behind a
+  version that lists the country when votes and quality are equal. Send
+  `countries` with every version proposed all the same: it is what puts a
+  version in front for its market.
 - **Votes belong to the food, not to a country**: there is one count per
-  version, and the rule compares the counts of the versions left for the
+  version, and the rule compares the counts of the candidates left for the
   request.
 - **The threshold** is `FOOD_DATA_USER_VERSION_VOTES` (3 by default), the
   same for the service and for the build, which records it in
@@ -255,7 +282,7 @@ served.
   `POST /v1/foods/{id}/votes` accept `?country=`, like the read, so that
   `served` in their answer is the one of the person. `POST /v1/products` and
   `POST /v1/foods/{id}/translations` accept `?lang=` and `?country=`.
-- **`version_exists`** compares `basis` and the eight nutrients, after the
+- **`version_exists`** compares `basis` and the nine nutrients, after the
   rounding of the build (4 decimals), with every visible version of the
   food. Portions and countries are not values: proposing the same values
   with another portion is refused.
@@ -327,8 +354,9 @@ misspelt name would otherwise be lost silently.
   like `fr` or `pt-br`.
 - `brand`, `category`, a portion label: at most 120 characters. `note`: 1000.
 - `countries`: at most 60 ISO 3166-1 alpha-2 codes, in any case.
-- `nutrients`: numbers or `null`; `kcal` is required. Values are rounded to
-  4 decimals and must pass the quality checks listed in the README.
+- `nutrients`: numbers or `null`; `kcal` is required, and `alcohol_g` may be
+  left out. Values are rounded to 4 decimals and must pass the quality
+  checks listed in the README.
 - `servings`: at most 10, each `{"label"?, "amount" > 0, "unit": "g" | "ml"}`.
 - `barcode`: digits, spaces and dashes; normalised (a UPC on 12 digits
   becomes a GTIN-13) and its check digit verified.

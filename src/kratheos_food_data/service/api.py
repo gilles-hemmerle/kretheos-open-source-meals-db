@@ -466,7 +466,7 @@ class Api:
         if not isinstance(is_drink, bool):
             raise invalid("is_drink must be true or false")
         values = validation.nutrients(data.get("nutrients"))
-        values.setdefault(validation.EXTRA_NUTRIENT, None)
+        values.setdefault(validation.OPTIONAL_NUTRIENT, None)
         validation.plausible(values)
         main_language = next(iter(names))
         fields = {
@@ -519,10 +519,10 @@ class Api:
             food = foods.find(context, validation.food_id(food_id))
             if food is None:
                 raise not_found()
-            if validation.EXTRA_NUTRIENT not in values:
-                # Alcohol is not asked for: the food keeps the one it is known with.
+            if validation.OPTIONAL_NUTRIENT not in values:
+                # Alcohol was left out: the food keeps the one it is known with.
                 known = [v["alcohol_g"] for v in food.versions if v["alcohol_g"] is not None]
-                values[validation.EXTRA_NUTRIENT] = known[0] if known else None
+                values[validation.OPTIONAL_NUTRIENT] = known[0] if known else None
             validation.plausible(values)
             for version in food.versions:
                 if version["basis"] == basis and all(

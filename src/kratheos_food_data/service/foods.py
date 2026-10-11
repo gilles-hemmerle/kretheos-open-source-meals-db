@@ -42,6 +42,7 @@ NUTRIENT_FIELDS = (
     ("saturated_fat_g", "saturated_fat_g"),
     ("fibre_g", "fiber_g"),
     ("salt_g", "salt_g"),
+    ("alcohol_g", "alcohol_g"),
 )
 NAME_ORIGIN_SOURCE = "source"
 NAME_ORIGIN_KRATHEOS = "kratheos"
@@ -443,7 +444,7 @@ def _nutrients(version: Mapping) -> dict:
         version: The version.
 
     Returns:
-        The eight values of the contract, None when unknown.
+        The nine values of the contract, None when unknown.
     """
     return {name: version[column] for name, column in NUTRIENT_FIELDS}
 

@@ -39,9 +39,10 @@ MAX_REPORTS_LIMIT = 100
 BASES = (schema.BASIS_100G, schema.BASIS_100ML)
 KINDS = (schema.KIND_GENERIC, schema.KIND_PRODUCT)
 UNITS = ("g", "ml")
-# Alcohol is not one of the eight values of the API, but the energy check
-# needs it: without it every wine would be refused.
-EXTRA_NUTRIENT = "alcohol_g"
+# Alcohol may be left out of a write, unlike the other nutrients, which are
+# then unknown: a version proposed without it keeps the alcohol the food is
+# known with, so that correcting the sugar of a wine does not lose it.
+OPTIONAL_NUTRIENT = "alcohol_g"
 _LANGUAGE = re.compile(r"[a-z]{2,3}(-[a-z0-9]{2,8})?")
 _COUNTRY = re.compile(r"[A-Za-z]{2}")
 _CONTRIBUTOR = re.compile(r"[\x21-\x7e]{8,200}")
@@ -314,7 +315,7 @@ def nutrients(value: object) -> dict[str, float | None]:
         ApiError: When a name is unknown, a value is not a number, or the
             energy is missing.
     """
-    known = dict(NUTRIENT_FIELDS) | {EXTRA_NUTRIENT: EXTRA_NUTRIENT}
+    known = dict(NUTRIENT_FIELDS)
     if not isinstance(value, dict):
         raise invalid("nutrients must be an object of numbers")
     unknown = sorted(set(value) - set(known))
@@ -322,7 +323,7 @@ def nutrients(value: object) -> dict[str, float | None]:
         raise invalid(f"unknown nutrient: {unknown[0]}")
     cleaned: dict[str, float | None] = {}
     for name, column in known.items():
-        if name == EXTRA_NUTRIENT and name not in value:
+        if name == OPTIONAL_NUTRIENT and name not in value:
             continue
         number = value.get(name)
         if number is not None and (

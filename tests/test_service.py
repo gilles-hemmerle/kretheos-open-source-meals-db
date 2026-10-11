@@ -67,6 +67,7 @@ NUTRIENT_KEYS = {
     "saturated_fat_g",
     "fibre_g",
     "salt_g",
+    "alcohol_g",
 }
 OTHER_VALUES = {
     "basis": "100g",
@@ -120,6 +121,7 @@ def test_food_record_has_the_shape_of_the_contract(service: Running) -> None:
             "saturated_fat_g": 10.6,
             "fibre_g": 0.0,
             "salt_g": 0.107,
+            "alcohol_g": 0.0,
         },
         "servings": [],
         "source": {
@@ -405,6 +407,31 @@ def test_product_that_makes_no_sense_is_refused(service: Running) -> None:
     wine["nutrients"]["alcohol_g"] = 10
     status, created = service.post("/v1/products", wine)
     assert status == 201 and set(created["nutrients"]) == NUTRIENT_KEYS
+    assert created["nutrients"]["alcohol_g"] == 10.0 and created["nutrients"]["sugars_g"] is None
+    # Alcohol is one of the values of a version: read with them, kept when a proposal
+    # leaves it out, and another alcohol is another version.
+    wine_id = created["id"]
+    assert service.versions(wine_id)[0]["nutrients"]["alcohol_g"] == 10.0
+    sweeter = {
+        "basis": "100ml",
+        "nutrients": {"kcal": 90, "protein_g": 0.1, "carbs_g": 4.6, "fat_g": 0},
+        "contributor": BOB,
+    }
+    status, answer = service.post(f"/v1/foods/{wine_id}/versions", sweeter)
+    assert status == 201
+    assert sorted(v["nutrients"]["alcohol_g"] for v in answer["versions"]) == [10.0, 10.0]
+    assert service.post(f"/v1/foods/{wine_id}/versions", sweeter)[1]["code"] == "version_exists"
+    stronger = copy.deepcopy(sweeter)
+    stronger["nutrients"] |= {"kcal": 104, "alcohol_g": 12}
+    status, answer = service.post(f"/v1/foods/{wine_id}/versions", stronger)
+    assert status == 201
+    assert sorted(v["nutrients"]["alcohol_g"] for v in answer["versions"]) == [10.0, 10.0, 12.0]
+    unknown = copy.deepcopy(sweeter)
+    unknown["nutrients"]["alcohol_g"] = None  # said to be unknown: the energy no longer adds up
+    assert service.post(f"/v1/foods/{wine_id}/versions", unknown)[1]["checks"] == [
+        "energy_macro_mismatch"
+    ]
+    assert service.food("ciqual:13000")["nutrients"]["alcohol_g"] == 0.0
 
 
 def test_versions_and_votes(service: Running) -> None:
@@ -555,6 +582,24 @@ def test_the_country_of_the_request_chooses_among_the_versions(service: Running)
     assert service.food(NUTELLA, "country=FR")["version_id"] == "off:3017620422003"
     assert service.food(NUTELLA)["version_id"] == version_id  # the most voted of all
 
+    # A version that lists no country is not "elsewhere": with its votes it is served
+    # to a country another version lists, and without them it stays behind that one.
+    anywhere = dict(OTHER_VALUES, countries=[], contributor=DAVE)
+    anywhere["nutrients"] = dict(OTHER_VALUES["nutrients"], kcal=535)
+    status, answer = service.post(f"/v1/foods/{NUTELLA}/versions?country=FR", anywhere)
+    unlisted = next(
+        v["version_id"] for v in answer["versions"] if v["origin"] == "user" and not v["countries"]
+    )
+    assert answer["versions"][0]["version_id"] == "off:3017620422003"
+    for contributor in ("contributor-key-erin", "contributor-key-frank"):
+        service.post(
+            f"/v1/foods/{NUTELLA}/votes", {"version_id": unlisted, "contributor": contributor}
+        )
+    assert service.food(NUTELLA, "country=FR")["version_id"] == unlisted
+    assert service.food(NUTELLA, "country=US")["version_id"] == unlisted
+    # Switzerland has a version of its own with as many votes: listing the country decides.
+    assert service.food(NUTELLA, "country=CH")["version_id"] == version_id
+
 
 def test_versions_that_differ_are_flagged(service: Running) -> None:
     """`versions_disagree` says when the versions of a food do not give the same values."""
@@ -568,21 +613,52 @@ def test_versions_that_differ_are_flagged(service: Running) -> None:
 
 
 def test_a_product_added_keeps_being_improved(service: Running) -> None:
-    """On a food no source knows, versions compete by votes alone."""
-    food_id = service.post("/v1/products", PRODUCT)[1]["id"]
+    """On a food no source knows, a later proposal needs more votes than what is served."""
+    created = service.post("/v1/products", PRODUCT)[1]
+    food_id = created["id"]
     better = dict(OTHER_VALUES, contributor=BOB)
     better["nutrients"] = dict(PRODUCT["nutrients"], kcal=260, fat_g=12)
     status, answer = service.post(f"/v1/foods/{food_id}/versions", better)
     assert status == 201 and len(answer["versions"]) == 2
-    # One vote each: the tie goes to the order of the build, where both are equal
-    # down to the date, then to the identifier.
-    assert sorted(v["votes"] for v in answer["versions"]) == [1, 1]
+    # One vote each: the values the product was created with stay, they came first.
+    assert [(v["version_id"], v["votes"], v["served"]) for v in answer["versions"]] == [
+        (created["version_id"], 1, True),
+        (answer["versions"][1]["version_id"], 1, False),
+    ]
+    assert service.food(food_id)["nutrients"]["kcal"] == 250.0
     service.post(
         f"/v1/foods/{food_id}/votes",
         {"version_id": answer["versions"][1]["version_id"], "contributor": CAROL},
     )
     served = service.food(food_id)
     assert served["version_id"] == answer["versions"][1]["version_id"] and served["votes"] == 2
+    assert served["nutrients"]["kcal"] == 260.0
+
+
+def test_one_plausible_entry_replaces_source_values_that_make_no_sense(service: Running) -> None:
+    """The threshold protects usable sources only."""
+    bircher = "gtin:7610000123451"  # 50 kcal for 20 g of fat: flagged by the build
+    food = service.food(bircher)
+    assert food["flags"] == ["basis_assumed", "energy_macro_mismatch"]
+    assert (food["version_origin"], food["versions_count"]) == ("source", 1)
+    entry = dict(OTHER_VALUES, countries=["CH"])
+    entry["nutrients"] = {"kcal": 460, "protein_g": 10, "carbs_g": 60, "fat_g": 20}
+    status, answer = service.post(f"/v1/foods/{bircher}/versions", entry)
+    assert status == 201
+    assert [(v["origin"], v["votes"], v["served"]) for v in answer["versions"]] == [
+        ("user", 1, True),  # one person, one vote: served at once
+        ("source", 0, False),
+    ]
+    food = service.food(bircher, "country=CH")
+    assert (food["version_origin"], food["nutrients"]["kcal"], food["flags"]) == (
+        "user",
+        460.0,
+        ["versions_disagree"],
+    )
+    assert food["name"] == "Bircher Müesli"
+    # A usable source is not replaced that way: the same on Nutella changes nothing.
+    service.post(f"/v1/foods/{NUTELLA}/versions", dict(OTHER_VALUES, contributor=BOB))
+    assert service.food(NUTELLA)["version_origin"] == "source"
 
 
 def test_translation_adds_a_name_and_never_replaces_the_source(service: Running) -> None:
