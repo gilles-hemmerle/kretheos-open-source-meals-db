@@ -595,9 +595,9 @@ compiles them, one chain and one country at a time, and the source `chain`
 reads them from the CSV files committed in `sources/chains/`, one per chain
 and country (`mcdonalds_fr.csv`). The build never downloads them. The source
 is presented under the name **Kratheos**: these are the values the chains
-publish for their products, compiled by Kratheos. The repository ships 35
+publish for their products, compiled by Kratheos. The repository ships 39
 files, 16 chains in France, Switzerland, Germany, Italy and Spain, which give
-3 837 products. Without a file the source is there and empty.
+4 450 products. Without a file the source is there and empty.
 
 Columns read (a file may hold more): `chain`, `country`, `language`,
 `product_name`, `category`, `product_key`, `portion_size`, `portion_unit`
