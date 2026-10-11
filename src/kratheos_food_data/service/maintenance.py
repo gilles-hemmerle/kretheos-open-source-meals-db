@@ -253,7 +253,8 @@ def rebuild(
         log(
             f"Exported the live database to {workspace.kratheos.name}:"
             f" {report['export']['products']} products, {report['export']['versions']} versions,"
-            f" {report['export']['votes']} votes, {report['export']['translations']} names"
+            f" {report['export']['votes']} votes, {report['export']['translations']} names,"
+            f" {report['export']['portions']} portions"
         )
     staging = workspace.work / "rebuild"
     shutil.rmtree(staging, ignore_errors=True)

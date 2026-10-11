@@ -8,7 +8,11 @@ Two shapes are defined here.
 * The *output* shape is what the build publishes. It is computed from the
   staging files by `normalize.py`, the same way for every source.
 
-Keeping both in one module makes the schema reviewable in one place, and lets
+A third, small shape sits beside them: the household portions a source
+publishes for its records (`PORTION_COLUMNS`), which the adapters that have
+some write to a second staging file.
+
+Keeping them in one module makes the schema reviewable in one place, and lets
 the tests check that adapters and outputs never drift from it.
 """
 
@@ -123,6 +127,18 @@ OUTPUT_COLUMNS: tuple[Column, ...] = (
     Column("updated_at", "DATE", "Last update of the record in the source."),
 )
 
+# The household portions a source publishes for its records ("1 large = 50 g",
+# "1 cup"), several per record. An adapter that has some writes them to a
+# second staging file with exactly these columns; nothing is ever guessed.
+PORTION_COLUMNS: tuple[Column, ...] = (
+    Column("source_record_id", "VARCHAR", "Identifier, in the source, of the record it is of."),
+    Column("position", "INTEGER", "Order among the portions of the record, from 1, as published."),
+    Column("labels", "MAP(VARCHAR, VARCHAR)", "Language code to label, as the source words it."),
+    Column("amount", "DOUBLE", "What one portion weighs or holds, in `unit`."),
+    Column("unit", "VARCHAR", "g or ml."),
+)
+PORTION_UNITS = ("g", "ml")
+
 BARCODE_EXTRA_COLUMNS: tuple[Column, ...] = (
     Column("product_id", "VARCHAR", "Identifier of the product itself: `gtin:<barcode>`."),
     Column("source_count", "INTEGER", "Number of sources that know the barcode."),
@@ -224,3 +240,28 @@ def staging_cast_select(relation: str) -> str:
         f'CAST("{column.name}" AS {column.type}) AS "{column.name}"' for column in STAGING_COLUMNS
     )
     return f"SELECT {columns} FROM {relation}"
+
+
+def portion_names() -> list[str]:
+    """Return the column names of a staging file of portions, in order.
+
+    Returns:
+        The names of `PORTION_COLUMNS`.
+    """
+    return [column.name for column in PORTION_COLUMNS]
+
+
+def portion_cast_select(relation: str) -> str:
+    """Build a SELECT that casts a relation to the exact schema of the portions.
+
+    Args:
+        relation: Table or sub-query (already parenthesised and aliased)
+            exposing every column of `PORTION_COLUMNS` by name.
+
+    Returns:
+        The SQL SELECT, in the order of the records and of their portions.
+    """
+    columns = ", ".join(
+        f'CAST("{column.name}" AS {column.type}) AS "{column.name}"' for column in PORTION_COLUMNS
+    )
+    return f"SELECT {columns} FROM {relation} ORDER BY source_record_id, position"

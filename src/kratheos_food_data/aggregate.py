@@ -42,6 +42,11 @@ of people who voted for it, and one of them is served.
   as before. `versions.py` states the whole rule.
 * Translations give a food the names it lacks. A translation never replaces
   a name the food already has; every name records where it comes from.
+* Portions. A food gets the household portions its source publishes for its
+  record ("1 large", 50 g), in the order of the source, then those people
+  added in Kratheos, oldest first. Nothing is borrowed from the same food of
+  another source, and no weight is ever computed: a food whose source gives
+  no portion has those people added, or none.
 
 The row of a food in `foods` holds the values served when no country is
 asked for; the table `versions` holds every version of the foods that have
@@ -88,6 +93,8 @@ PREFERENCE_ORDER = (
 SOURCES_FIRST_ORDER = f"(p.source = '{kratheos.SOURCE_ID}') ASC, {PREFERENCE_ORDER}"
 NAME_ORIGIN_SOURCE = "source"
 NAME_ORIGIN_KRATHEOS = "kratheos"
+PORTION_ORIGIN_SOURCE = "source"
+PORTION_ORIGIN_KRATHEOS = "kratheos"
 # Columns of a food that belong to the version served; the others say who the
 # food is and never change with the votes.
 VERSION_COLUMNS = (
@@ -283,6 +290,92 @@ def create_source_views(
         [(source.id, source.priority) for source in sources],
     )
     select_by_barcode(con, "by_barcode", "source_records")
+
+
+def create_portion_view(con: duckdb.DuckDBPyConnection, portions: dict[str, Path]) -> None:
+    """Create the view `source_portions`: the portions the sources publish.
+
+    Args:
+        con: DuckDB connection.
+        portions: Staging file of the portions of each source that has
+            some (`schema.PORTION_COLUMNS`), by source id.
+    """
+    selects = [
+        f"""
+        SELECT {_sql_string(source_id)} || ':' || source_record_id AS record_id,
+               {_sql_string(source_id)} AS source, position, labels, amount, unit
+        FROM read_parquet({_sql_string(path)})
+        """
+        for source_id, path in sorted(portions.items())
+    ]
+    if not selects:
+        selects = [
+            "SELECT CAST(NULL AS VARCHAR) AS record_id, CAST(NULL AS VARCHAR) AS source,"
+            " CAST(NULL AS INTEGER) AS position, CAST(NULL AS MAP(VARCHAR, VARCHAR)) AS labels,"
+            " CAST(NULL AS DOUBLE) AS amount, CAST(NULL AS VARCHAR) AS unit WHERE FALSE"
+        ]
+    con.execute("CREATE OR REPLACE VIEW source_portions AS " + " UNION ALL ".join(selects))
+
+
+def _food_portions_select() -> str:
+    """Build the SELECT listing the portions of every food that has some.
+
+    The portions a source gives for the record a food is come first, in the
+    order of the source; those added in Kratheos follow, oldest first (dates
+    are days: two of the same day are ordered by their identifier, which
+    does not change). A portion needs a label, a weight or a volume above
+    zero and a unit; nothing else is checked here.
+
+    Returns:
+        A SELECT over `source_portions`, `kratheos_portions` and `foods`,
+        with `food_pk`, `position`, `portion_id`, `origin`, `source`,
+        `labels`, `amount` and `unit`.
+    """
+    units = ", ".join(f"'{unit}'" for unit in schema.PORTION_UNITS)
+    return f"""
+    WITH official AS (
+        SELECT
+            f.food_pk,
+            CAST(row_number() OVER (PARTITION BY f.food_pk ORDER BY p.position) AS INTEGER)
+                AS position,
+            f.id || '{kratheos.PORTION_MARK}' || p.position AS portion_id,
+            '{PORTION_ORIGIN_SOURCE}' AS origin,
+            p.source,
+            p.labels,
+            p.amount,
+            p.unit
+        FROM source_portions AS p
+        JOIN foods AS f ON f.id = p.record_id
+        WHERE p.amount > 0 AND p.unit IN ({units}) AND cardinality(p.labels) > 0
+    ),
+    added AS (
+        SELECT
+            f.food_pk,
+            row_number() OVER (PARTITION BY f.food_pk ORDER BY k.updated_at, k.portion_id)
+                AS rank,
+            k.portion_id,
+            MAP([k.lang], [k.label]) AS labels,
+            k.amount,
+            k.unit
+        FROM kratheos_portions AS k
+        JOIN foods AS f ON f.id = k.food_id
+        WHERE k.amount > 0 AND k.unit IN ({units})
+    )
+    SELECT * FROM official
+    UNION ALL
+    SELECT
+        a.food_pk,
+        CAST(coalesce(o.last, 0) + a.rank AS INTEGER) AS position,
+        a.portion_id,
+        '{PORTION_ORIGIN_KRATHEOS}' AS origin,
+        '{kratheos.SOURCE_ID}' AS source,
+        a.labels,
+        a.amount,
+        a.unit
+    FROM added AS a
+    LEFT JOIN (SELECT food_pk, max(position) AS last FROM official GROUP BY food_pk) AS o
+        ON o.food_pk = a.food_pk
+    """
 
 
 def _export_select(relation: str, columns: list[str], order: str, target: str) -> str:
@@ -525,12 +618,14 @@ def build_foods(
 
     Creates `foods` (one row per food, with `food_pk`, a number used only to
     link the tables inside the SQLite file), `food_names` (every name of
-    every food, with its origin) and `food_versions` (every version of the
-    foods that have more than one).
+    every food, with its origin), `food_versions` (every version of the
+    foods that have more than one) and `food_portions` (the household
+    portions of the foods that have some).
 
     Args:
-        con: DuckDB connection on which `create_source_views` was called and
-            the Kratheos tables were loaded (`kratheos.load_tables`).
+        con: DuckDB connection on which `create_source_views` and
+            `create_portion_view` were called and the Kratheos tables were
+            loaded (`kratheos.load_tables`).
         kratheos_records: Normalised records of the Kratheos products, or
             None when there is none.
         user_version_votes: Votes a version coming from a user needs to be
@@ -626,6 +721,13 @@ def build_foods(
         WHERE map_extract(f.names, t.lang)[1] IS NULL
         """
     )
+    con.execute("CREATE OR REPLACE TEMP TABLE food_portions AS " + _food_portions_select())
+    portions, portions_applied = con.execute(
+        f"""
+        SELECT (SELECT count(*) FROM kratheos_portions),
+               (SELECT count(*) FROM food_portions WHERE origin = '{PORTION_ORIGIN_KRATHEOS}')
+        """
+    ).fetchone()
     versions, versions_applied = con.execute(
         "SELECT (SELECT count(*) FROM kratheos_versions), (SELECT count(*) FROM user_versions)"
     ).fetchone()
@@ -669,6 +771,9 @@ def build_foods(
         "translations_applied": translations_applied,
         "translations_ignored_name_already_given": translations_known,
         "translations_without_target": translations - translations_applied - translations_known,
+        "portions": portions,
+        "portions_applied": portions_applied,
+        "portions_without_target": portions - portions_applied,
         "user_version_votes": int(user_version_votes),
         "foods_with_several_versions": several,
         "foods_served_from_a_user_version": from_user,
@@ -877,8 +982,9 @@ def foods_statistics(con: duckdb.DuckDBPyConnection) -> dict:
         con: DuckDB connection on which `build_foods` was called.
 
     Returns:
-        Number of foods by kind and by source, of names by origin, and of
-        versions kept for the foods that have several.
+        Number of foods by kind and by source, of names by origin, of
+        versions kept for the foods that have several, and of household
+        portions: how many each source brought, to how many foods.
     """
     foods, generic, with_barcode, without_barcode = con.execute(
         f"""
@@ -900,4 +1006,32 @@ def foods_statistics(con: duckdb.DuckDBPyConnection) -> dict:
             con, "SELECT origin, count(*) FROM food_names GROUP BY 1 ORDER BY 1"
         ),
         "versions_kept": con.execute("SELECT count(*) FROM food_versions").fetchone()[0],
+        "portions": portions_statistics(con),
+    }
+
+
+def portions_statistics(con: duckdb.DuckDBPyConnection) -> dict:
+    """Count the household portions of the main database.
+
+    Args:
+        con: DuckDB connection on which `build_foods` was called.
+
+    Returns:
+        `portions` and `foods` (those with at least one portion), in all,
+        and `by_source`: the same for what each source brought (`kratheos`
+        for the portions people added).
+    """
+    portions, foods = con.execute(
+        "SELECT count(*), count(DISTINCT food_pk) FROM food_portions"
+    ).fetchone()
+    return {
+        "portions": portions,
+        "foods": foods,
+        "by_source": {
+            source: {"foods": with_some, "portions": count}
+            for source, with_some, count in con.execute(
+                "SELECT source, count(DISTINCT food_pk), count(*) FROM food_portions"
+                " GROUP BY 1 ORDER BY 1"
+            ).fetchall()
+        },
     }

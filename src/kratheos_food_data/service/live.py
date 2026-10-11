@@ -9,7 +9,8 @@ out:
 
 * `products`: the foods added, with their names and values;
 * `versions`: the other values proposed for a food;
-* `translations`: the names added to a food in a language it lacks.
+* `translations`: the names added to a food in a language it lacks;
+* `portions`: the household portions added to a food ("1 oeuf moyen", 50 g).
 
 Tables that never leave the server:
 
@@ -23,13 +24,15 @@ Tables that never leave the server:
   per person and per food, replaced when the person reports the food again;
 * `hidden`: the identifiers moderation hid (a food or one version);
 * `history`: one line per accepted write (what, on which record, by which
-  hashed key). It is the only link between a product, a version or a name
-  and the key that wrote it: the tables that are exported carry no author;
+  hashed key). It is the only link between a product, a version, a name or
+  a portion and the key that wrote it: the tables that are exported carry no
+  author;
 * `blocked`: the hashed keys moderation blocked. Their later writes are
   refused, their votes are no longer counted and their reports are left out
   of the moderation lists, for as long as the key is there;
-* `withdrawn`: what a blocked key wrote (its products, its versions, the
-  names it added that are still the ones shown), found through `history`
+* `withdrawn`: what a blocked key wrote (its products, its versions, its
+  portions, the names it added that are still the ones shown), found through
+  `history`
   when the key was blocked. A withdrawn record is hidden like one moderation
   hid, and shown again when the key is unblocked: `hidden` is never touched,
   so that undoing a block restores exactly what was there before it.
@@ -58,7 +61,7 @@ from ..barcode import normalize_gtin
 from ..schema import KIND_PRODUCT
 from ..sqlite_export import FTS_PREFIXES, FTS_TOKENIZER
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 CHUNK = 500
 BUSY_TIMEOUT_MS = 10_000
 REPORT_REASONS = ("wrong_values", "duplicate", "inappropriate", "other")
@@ -70,10 +73,19 @@ ACTION_CREATE_PRODUCT = "create_product"
 ACTION_ADD_VERSION = "add_version"
 ACTION_VOTE = "vote"
 ACTION_TRANSLATE = "translate"
-WRITE_ACTIONS = (ACTION_CREATE_PRODUCT, ACTION_ADD_VERSION, ACTION_VOTE, ACTION_TRANSLATE)
+ACTION_ADD_PORTION = "add_portion"
+WRITE_ACTIONS = (
+    ACTION_CREATE_PRODUCT,
+    ACTION_ADD_VERSION,
+    ACTION_VOTE,
+    ACTION_TRANSLATE,
+    ACTION_ADD_PORTION,
+)
 # Largest number of rows of each kind listed for one contributor key.
 CONTRIBUTOR_ROWS = 500
 RECORD_PREFIX = f"{kratheos.SOURCE_ID}:"
+# Origin of a portion people added, as `food.sqlite` writes it.
+PORTION_ORIGIN = "kratheos"
 # Condition leaving out the rows of `votes` or `reports` written by a blocked key.
 _NOT_BLOCKED = "contributor NOT IN (SELECT contributor FROM blocked)"
 
@@ -81,6 +93,21 @@ NUTRIENTS = tuple(name for name, _ in kratheos.NUTRIENT_COLUMNS)
 SERVING = tuple(name for name, _ in kratheos.SERVING_COLUMNS)
 VERSION_VALUES = ("basis", *NUTRIENTS, *SERVING)
 PRODUCT_VALUES = tuple(name for name, _ in kratheos.VALUE_COLUMNS)
+
+# The table of the portions people added, and its index: part of a new live
+# database, and what layout 3 adds to an older one.
+_PORTIONS_DDL = """
+CREATE TABLE IF NOT EXISTS portions (
+    portion_id TEXT PRIMARY KEY,     -- kratheos:p:<uuid>
+    food_id TEXT NOT NULL,
+    lang TEXT NOT NULL,              -- language of the label
+    label TEXT NOT NULL,
+    amount REAL NOT NULL,            -- what one portion weighs or holds
+    unit TEXT NOT NULL,              -- g or ml
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS portions_food ON portions (food_id);
+"""
 
 _VALUE_DDL = ",\n    ".join(f"{name} {kind}" for name, kind in kratheos.VALUE_COLUMNS)
 _VERSION_DDL = ",\n    ".join(f"{name} {kind}" for name, kind in kratheos.VERSION_VALUE_COLUMNS)
@@ -121,7 +148,7 @@ CREATE TABLE translations (
     updated_at TEXT NOT NULL,
     PRIMARY KEY (food_id, lang)
 ) WITHOUT ROWID;
-
+{_PORTIONS_DDL}
 -- Never exported: one vote per contributor key and per food.
 CREATE TABLE votes (
     food_id TEXT NOT NULL,
@@ -181,7 +208,7 @@ CREATE TABLE blocked (
 
 -- Never exported: what a blocked key wrote, hidden for as long as it is blocked.
 CREATE TABLE withdrawn (
-    record_id TEXT NOT NULL,         -- a product record or a version; the food, for a name
+    record_id TEXT NOT NULL,         -- a product record, a version, a portion; the food, for a name
     lang TEXT NOT NULL DEFAULT '',   -- language of a name added, empty for a record
     contributor TEXT NOT NULL,       -- keyed hash of the key that wrote it
     withdrawn_at TEXT NOT NULL,
@@ -196,8 +223,9 @@ CREATE VIRTUAL TABLE names_fts USING fts5(
 
 # What each layout lacks to be the next one, applied in one transaction when
 # a live database written by an earlier version is opened. Nothing that is
-# stored is changed: layout 2 only adds tables and indexes.
+# stored is changed: layouts 2 and 3 only add tables and indexes.
 UPGRADES = {
+    2: _PORTIONS_DDL,
     1: """
 CREATE INDEX IF NOT EXISTS reports_food ON reports (food_id, state);
 CREATE INDEX IF NOT EXISTS history_record ON history (record_id);
@@ -333,6 +361,55 @@ def versions_by_food(connection: sqlite3.Connection, food_ids: Iterable[str]) ->
     for row in _select_in(connection, sql, food_ids):
         found.setdefault(row["food_id"], []).append(row)
     return found
+
+
+def portions_by_food(connection: sqlite3.Connection, food_ids: Iterable[str]) -> dict:
+    """Read the portions added to the given foods.
+
+    Args:
+        connection: A connection to the live database.
+        food_ids: Identifiers of foods.
+
+    Returns:
+        For each food that has some, its added portions, oldest first:
+        `portion_id`, `origin`, `labels` (by language code), `amount`,
+        `unit`. Dates are days, as in the public layer: two portions of the
+        same day are ordered by their identifier, so that a rebuild keeps
+        the order.
+    """
+    found: dict[str, list[dict]] = {}
+    sql = (
+        "SELECT * FROM portions WHERE food_id IN ({marks})"
+        " ORDER BY substr(updated_at, 1, 10), portion_id"
+    )
+    for row in _select_in(connection, sql, food_ids):
+        found.setdefault(row["food_id"], []).append(
+            {
+                "portion_id": row["portion_id"],
+                "origin": PORTION_ORIGIN,
+                "labels": {row["lang"]: row["label"]},
+                "amount": row["amount"],
+                "unit": row["unit"],
+            }
+        )
+    return found
+
+
+def portion_owner(connection: sqlite3.Connection, portion_id: str) -> str | None:
+    """Return the food an added portion belongs to.
+
+    Args:
+        connection: A connection to the live database.
+        portion_id: `kratheos:p:<uuid>`.
+
+    Returns:
+        The identifier of the food, or None when the live database does not
+        know the portion.
+    """
+    row = connection.execute(
+        "SELECT food_id FROM portions WHERE portion_id = ?", (portion_id,)
+    ).fetchone()
+    return row["food_id"] if row else None
 
 
 def version_owner(connection: sqlite3.Connection, version_id: str) -> str | None:
@@ -661,16 +738,23 @@ def written_by(connection: sqlite3.Connection, contributor: str) -> dict:
         `products` (`food_id`, `record_id`, `name`, `at`), `versions`
         (`version_id`, `food_id`, `at`), `translations` (`food_id`,
         `language`, `name`, `at`, and `current`: whether it is still the
-        name of the food in that language), `votes` (`food_id`,
-        `version_id`, `at`) and `reports` (`id`, `food_id`, `reason`,
-        `note`, `state`, `at`), each most recent first.
+        name of the food in that language), `portions` (`portion_id`,
+        `food_id`, `language`, `label`, `amount`, `unit`, `at`), `votes`
+        (`food_id`, `version_id`, `at`) and `reports` (`id`, `food_id`,
+        `reason`, `note`, `state`, `at`), each most recent first.
     """
     lines = connection.execute(
         "SELECT id, at, action, record_id, detail FROM history WHERE contributor = ?"
-        " AND action IN (?, ?, ?) ORDER BY id DESC",
-        (contributor, ACTION_CREATE_PRODUCT, ACTION_ADD_VERSION, ACTION_TRANSLATE),
+        " AND action IN (?, ?, ?, ?) ORDER BY id DESC",
+        (
+            contributor,
+            ACTION_CREATE_PRODUCT,
+            ACTION_ADD_VERSION,
+            ACTION_TRANSLATE,
+            ACTION_ADD_PORTION,
+        ),
     ).fetchall()
-    products, versions, names = [], [], []
+    products, versions, names, portions = [], [], [], []
     for line in lines:
         detail = json.loads(line["detail"])
         if line["action"] == ACTION_CREATE_PRODUCT:
@@ -685,6 +769,18 @@ def written_by(connection: sqlite3.Connection, contributor: str) -> dict:
         elif line["action"] == ACTION_ADD_VERSION:
             versions.append(
                 {"version_id": line["record_id"], "food_id": detail["food_id"], "at": line["at"]}
+            )
+        elif line["action"] == ACTION_ADD_PORTION:
+            portions.append(
+                {
+                    "portion_id": line["record_id"],
+                    "food_id": detail["food_id"],
+                    "language": detail["lang"],
+                    "label": detail["label"],
+                    "amount": detail["amount"],
+                    "unit": detail["unit"],
+                    "at": line["at"],
+                }
             )
         else:
             names.append(
@@ -728,6 +824,7 @@ def written_by(connection: sqlite3.Connection, contributor: str) -> dict:
         "products": products,
         "versions": versions,
         "translations": translations,
+        "portions": portions,
         "votes": votes,
         "reports": reported,
     }
@@ -740,7 +837,7 @@ def counts(connection: sqlite3.Connection) -> dict[str, int]:
         connection: A connection to the live database.
 
     Returns:
-        The number of products, versions, translations and votes.
+        The number of products, versions, translations, votes and portions.
     """
     row = connection.execute(
         """
@@ -748,10 +845,12 @@ def counts(connection: sqlite3.Connection) -> dict[str, int]:
                (SELECT count(*) FROM versions),
                (SELECT count(*) FROM translations),
                (SELECT count(*) FROM votes)
-               + (SELECT coalesce(sum(votes), 0) FROM anonymous_votes)
+               + (SELECT coalesce(sum(votes), 0) FROM anonymous_votes),
+               (SELECT count(*) FROM portions)
         """
     ).fetchone()
-    return dict(zip(("products", "versions", "translations", "votes"), row, strict=True))
+    kinds = ("products", "versions", "translations", "votes", "portions")
+    return dict(zip(kinds, row, strict=True))
 
 
 class LiveStore:
@@ -1036,6 +1135,32 @@ class LiveStore:
             self._refresh_search(food_id)
             self._log(ACTION_TRANSLATE, food_id, author, {"lang": lang, "name": name})
 
+    def add_portion(self, portion_id: str, food_id: str, fields: dict, contributor: str) -> None:
+        """Add a household portion to a food, for everyone.
+
+        Args:
+            portion_id: Identifier given to the portion.
+            food_id: Identifier of the food.
+            fields: `lang`, `label`, `amount` and `unit` of the portion.
+            contributor: The contributor key.
+        """
+        author = self.contributor_hash(contributor)
+        with self._lock, self._writer:
+            self._writer.execute(
+                "INSERT INTO portions (portion_id, food_id, lang, label, amount, unit, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    portion_id,
+                    food_id,
+                    fields["lang"],
+                    fields["label"],
+                    fields["amount"],
+                    fields["unit"],
+                    self._clock(),
+                ),
+            )
+            self._log(ACTION_ADD_PORTION, portion_id, author, {"food_id": food_id, **fields})
+
     def report(self, food_id: str, reason: str, note: str, contributor: str) -> tuple[int, bool]:
         """Record what a person reports about a food.
 
@@ -1097,13 +1222,14 @@ class LiveStore:
             author: Keyed hash of the contributor key.
 
         Returns:
-            The identifiers of its product records and of its versions, and
-            the names it added (food and language) that nobody replaced
-            since.
+            The identifiers of its product records, of its versions and of
+            its portions, and the names it added (food and language) that
+            nobody replaced since.
         """
         written = written_by(self._writer, author)
         records = [product["record_id"] for product in written["products"]]
         records += [version["version_id"] for version in written["versions"]]
+        records += [portion["portion_id"] for portion in written["portions"]]
         names = [
             (name["food_id"], name["language"])
             for name in written["translations"]
@@ -1114,8 +1240,9 @@ class LiveStore:
     def block(self, contributor: str) -> dict:
         """Hide everything a contributor key wrote, and refuse its later writes.
 
-        Its products, its versions and the names it added (those nobody
-        replaced since) are withdrawn: hidden like a record moderation hid,
+        Its products, its versions, its portions and the names it added
+        (those nobody replaced since) are withdrawn: hidden like a record
+        moderation hid,
         without touching what moderation hid one by one. Its votes stop
         counting and its reports are left out of the moderation lists, for
         as long as it is blocked. Blocking a key that already is changes
@@ -1126,7 +1253,8 @@ class LiveStore:
 
         Returns:
             `contributor` (the keyed hash), `blocked_at`, and `withdrawn`:
-            how many products, versions and names are hidden with the key.
+            how many products, versions, names and portions are hidden with
+            the key.
         """
         author = self.contributor_hash(contributor)
         with self._lock, self._writer:
@@ -1164,7 +1292,7 @@ class LiveStore:
 
         Returns:
             `contributor` (the keyed hash) and `restored`: how many
-            products, versions and names are shown again.
+            products, versions, names and portions are shown again.
         """
         author = self.contributor_hash(contributor)
         with self._lock, self._writer:
@@ -1192,15 +1320,17 @@ class LiveStore:
             author: Keyed hash of the contributor key.
 
         Returns:
-            The number of products, versions and names withdrawn.
+            The number of products, versions, names and portions withdrawn.
         """
+        version, portion = kratheos.VERSION_PREFIX + "%", kratheos.PORTION_PREFIX + "%"
         row = self._writer.execute(
-            "SELECT coalesce(sum(lang = '' AND record_id NOT LIKE ?), 0),"
-            " coalesce(sum(lang = '' AND record_id LIKE ?), 0), coalesce(sum(lang <> ''), 0)"
+            "SELECT coalesce(sum(lang = '' AND record_id NOT LIKE ? AND record_id NOT LIKE ?), 0),"
+            " coalesce(sum(lang = '' AND record_id LIKE ?), 0), coalesce(sum(lang <> ''), 0),"
+            " coalesce(sum(lang = '' AND record_id LIKE ?), 0)"
             " FROM withdrawn WHERE contributor = ?",
-            (kratheos.VERSION_PREFIX + "%", kratheos.VERSION_PREFIX + "%", author),
+            (version, portion, version, portion, author),
         ).fetchone()
-        return dict(zip(("products", "versions", "translations"), row, strict=True))
+        return dict(zip(("products", "versions", "translations", "portions"), row, strict=True))
 
     def close_report(self, report_id: int) -> bool:
         """Close a report.
@@ -1249,9 +1379,10 @@ class LiveStore:
             layer: The content of a `kratheos.sqlite`.
 
         Returns:
-            How many products, versions, translations and votes were added.
+            How many products, versions, translations, votes and portions
+            were added.
         """
-        added = {"products": 0, "versions": 0, "translations": 0, "votes": 0}
+        added = {"products": 0, "versions": 0, "translations": 0, "votes": 0, "portions": 0}
         touched: set[str] = set()
         with self._lock, self._writer:
             now = self._clock()
@@ -1327,6 +1458,21 @@ class LiveStore:
                     (vote["version_id"], vote["food_id"], vote["votes"], vote["updated_at"]),
                 )
                 added["votes"] += vote["votes"]
+            for portion in layer.portions:
+                cursor = self._writer.execute(
+                    "INSERT OR IGNORE INTO portions (portion_id, food_id, lang, label, amount,"
+                    " unit, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        portion["portion_id"],
+                        portion["food_id"],
+                        portion["lang"],
+                        " ".join(portion["label"].split()),
+                        portion["amount"],
+                        portion["unit"],
+                        portion["updated_at"],
+                    ),
+                )
+                added["portions"] += cursor.rowcount
             for food_id in sorted(touched):
                 self._refresh_search(food_id)
             self._log("import_layer", "", None, {**added, "at": now})

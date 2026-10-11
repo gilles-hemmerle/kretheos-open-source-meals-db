@@ -209,6 +209,7 @@ def test_meta_gives_build_date_sources_licences_and_counts(service: Running) -> 
         "versions": 0,
         "translations": 0,
         "votes": 0,
+        "portions": 0,
     }
     assert meta["service"]["user_version_votes"] == 3
     assert service.get("/v1/health")[1]["status"] == "ok"
@@ -721,6 +722,7 @@ def test_versions_and_votes(service: Running) -> None:
         "versions": 1,
         "translations": 0,
         "votes": 4,
+        "portions": 0,
     }
 
 

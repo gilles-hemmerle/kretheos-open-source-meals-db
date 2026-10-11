@@ -10,6 +10,10 @@ with `implausible_values` and the list of the checks that failed.
 Limits, chosen wide enough for any real food and narrow enough to keep what
 is stored small: names of 200 characters, brand and category of 120, a note
 of 1000, 30 languages, 60 countries, 10 portions (the first one is stored).
+
+A household portion people add to a food ("1 oeuf moyen", 50 g) has a label
+of 120 characters at most and weighs or holds from 1 to 2000 g or ml: below
+or above, it is refused with `implausible_portion`.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import unicodedata
 from collections.abc import Mapping
 
 from .. import plausibility, schema
@@ -31,6 +36,9 @@ MAX_LANGUAGES = 30
 MAX_COUNTRIES = 60
 MAX_SERVINGS = 10
 MAX_SERVING_AMOUNT = 10_000
+# What a household portion added by a person may weigh or hold, in g or ml.
+MIN_PORTION_AMOUNT = 1
+MAX_PORTION_AMOUNT = 2000
 MAX_ID = 80
 MAX_LIMIT = 50
 DEFAULT_LIMIT = 20
@@ -382,6 +390,56 @@ def serving(value: object, basis: str) -> dict:
                 "serving_text": label,
             }
     return kept or empty
+
+
+def fold(text: str) -> str:
+    """Fold a label so that two wordings of the same portion compare equal.
+
+    Args:
+        text: A label.
+
+    Returns:
+        The label in lower case, without accents nor repeated spaces
+        ("1 Œuf  moyen" and "1 oeuf moyen" fold to the same text).
+    """
+    decomposed = unicodedata.normalize("NFKD", text.replace("œ", "oe").replace("Œ", "oe"))
+    stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return " ".join(stripped.casefold().split())
+
+
+def portion(body: Mapping) -> dict:
+    """Check the household portion a person adds to a food.
+
+    Args:
+        body: The body of the request: `language`, `label`, `amount`, `unit`.
+
+    Returns:
+        `lang`, `label`, `amount` (rounded as the build stores numbers) and
+        `unit` of the portion.
+
+    Raises:
+        ApiError: `invalid_request` when a field is missing or malformed,
+            `implausible_portion` when the amount is below 1 or above 2000.
+    """
+    lang = language(body.get("language"), "language", required=True)
+    label = text(body.get("label"), "label", MAX_LABEL, required=True)
+    amount = body.get("amount")
+    if (
+        isinstance(amount, bool)
+        or not isinstance(amount, (int, float))
+        or not math.isfinite(amount)
+    ):
+        raise invalid("amount must be a number")
+    unit = body.get("unit")
+    if unit not in UNITS:
+        raise invalid("unit must be g or ml")
+    if not MIN_PORTION_AMOUNT <= amount <= MAX_PORTION_AMOUNT:
+        raise ApiError(
+            422,
+            "implausible_portion",
+            f"a portion weighs or holds from {MIN_PORTION_AMOUNT} to {MAX_PORTION_AMOUNT} g or ml",
+        )
+    return {"lang": lang, "label": label, "amount": plausibility.rounded(amount), "unit": unit}
 
 
 def basis(value: object) -> str:

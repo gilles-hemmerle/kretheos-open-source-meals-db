@@ -23,6 +23,9 @@ Layout of the file:
   one (the records of the sources sharing a barcode, the products added in
   Kratheos, the versions proposed by users), with its votes, its position in
   the order of the build and whether it is the one in `foods`.
+* `portions`: the household portions of the foods that have some ("1 large",
+  50 g): those their source publishes, in its order, then those people added
+  in Kratheos. One row per portion, its labels by language as JSON text.
 * `sources`: the sources, with their version, licence and attribution.
 * `meta`: version of the layout, licence, helper queries.
 
@@ -45,7 +48,7 @@ import duckdb
 from . import __version__
 from .names import DISPLAY_NAME_SQL, DISPLAY_NAMES_VIEW_SQL
 
-LAYOUT_VERSION = 2
+LAYOUT_VERSION = 3
 BATCH_ROWS = 50_000
 FTS_TOKENIZER = "unicode61 remove_diacritics 2"
 FTS_PREFIXES = "2 3"
@@ -213,6 +216,17 @@ CREATE TABLE versions (
     PRIMARY KEY (food_pk, position)
 ) WITHOUT ROWID;
 
+CREATE TABLE portions (
+    food_pk INTEGER NOT NULL REFERENCES foods (pk),
+    position INTEGER NOT NULL,
+    portion_id TEXT NOT NULL,
+    origin TEXT NOT NULL CHECK (origin IN ('source', 'kratheos')),
+    labels TEXT NOT NULL,
+    amount REAL NOT NULL,
+    unit TEXT NOT NULL CHECK (unit IN ('g', 'ml')),
+    PRIMARY KEY (food_pk, position)
+) WITHOUT ROWID;
+
 CREATE VIRTUAL TABLE foods_fts USING fts5(
     names, brand, content = '', tokenize = '{FTS_TOKENIZER}', prefix = '{FTS_PREFIXES}'
 );
@@ -253,7 +267,8 @@ def write_food_database(
     """Write `food.sqlite` from the tables created by `aggregate.build_foods`.
 
     Args:
-        con: DuckDB connection holding `foods`, `food_names`, `food_versions`.
+        con: DuckDB connection holding `foods`, `food_names`, `food_versions`
+            and `food_portions`.
         path: Where to write the database.
         sources: One description per source present in the foods: id, name,
             publisher, homepage, version, released, priority, licence,
@@ -330,6 +345,14 @@ def write_food_database(
         _copy(
             con,
             database,
+            "SELECT food_pk, position, portion_id, origin, CAST(to_json(labels) AS VARCHAR),"
+            " amount, unit FROM food_portions ORDER BY food_pk, position",
+            "INSERT INTO portions (food_pk, position, portion_id, origin, labels, amount, unit)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        _copy(
+            con,
+            database,
             "SELECT country, food_pk FROM (SELECT unnest(countries) AS country, food_pk FROM foods)"
             " ORDER BY country, food_pk",
             "INSERT INTO food_countries (country, food_pk) VALUES (?, ?)",
@@ -381,6 +404,7 @@ def write_food_database(
             "CREATE UNIQUE INDEX foods_barcode ON foods (barcode) WHERE barcode IS NOT NULL"
         )
         database.execute("CREATE INDEX versions_id ON versions (version_id)")
+        database.execute("CREATE INDEX portions_id ON portions (portion_id)")
         database.execute("COMMIT")
         database.execute("INSERT INTO foods_fts (foods_fts) VALUES ('optimize')")
         database.execute("ANALYZE")

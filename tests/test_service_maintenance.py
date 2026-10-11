@@ -140,11 +140,13 @@ def test_export_is_public_complete_and_always_the_same(service: Running, tmp_pat
     assert first.read_bytes() == second.read_bytes()
     again = export.export_layer(service.settings.live, first)
     assert again["changed"] is False and again["sha256"] == summary["sha256"]
-    assert {key: summary[key] for key in ("products", "versions", "votes", "translations")} == {
+    counted = ("products", "versions", "votes", "translations", "portions")
+    assert {key: summary[key] for key in counted} == {
         "products": 2,  # the hidden one is left out
         "versions": 1,
         "votes": 7,
         "translations": 1,
+        "portions": 0,
     }
 
     layer = kratheos.read_layer(first)  # the layout check of the build passes
@@ -329,6 +331,7 @@ def test_whole_loop_export_rebuild_swap(service: Running) -> None:
         "versions": 1,
         "translations": 1,
         "votes": 7,
+        "portions": 0,
     }
     lost.close()
 
@@ -432,7 +435,7 @@ def test_ready_made_database_is_published_and_installed(
     assert {"manifest.json", "identifiers.txt.gz", "kratheos.sqlite"} <= set(names)
     assert not (published / "food.sqlite").exists()
     index = json.loads((published / "DATABASE.json").read_text(encoding="utf-8"))
-    assert index["foods"] == 33 and index["layout_version"] == 2 and len(index["parts"]) == 2
+    assert index["foods"] == 33 and index["layout_version"] == 3 and len(index["parts"]) == 2
 
     # A new host: no database, no live database, no original.
     host = tmp_path / "host"
@@ -441,7 +444,13 @@ def test_ready_made_database_is_published_and_installed(
         f"{file_server.url}/v1", database, live_path, b"secret-of-the-new-host", log=quiet
     )
     assert report["installed"] and report["foods"] == 33
-    assert report["layer"] == {"products": 2, "versions": 1, "translations": 1, "votes": 7}
+    assert report["layer"] == {
+        "products": 2,
+        "versions": 1,
+        "translations": 1,
+        "votes": 7,
+        "portions": 0,
+    }
     assert database.read_bytes() == service.settings.database.read_bytes()
     assert (host / "manifest.json").exists() and (host / "identifiers.txt.gz").exists()
     assert not (host / "incoming").exists()
@@ -599,6 +608,7 @@ def test_import_layer_only_adds_what_is_missing(service: Running, tmp_path: Path
         "versions": 0,
         "translations": 0,
         "votes": 0,
+        "portions": 0,
     }
     root = str(service.workspace.sources_file.parent)
     fresh = tmp_path / "fresh" / "live.sqlite"

@@ -31,7 +31,10 @@ Figures of the build of 2026-10-11:
 | Swiss Food Composition Database | 1 246 | 1 216 generic foods, 30 branded |
 
 That is 26 950 generic foods and 3 890 203 product records for 3 404 293
-distinct barcodes; `food.sqlite` holds 3 564 569 foods.
+distinct barcodes; `food.sqlite` holds 3 564 569 foods. 17 755 of the generic
+foods have [household portions](#household-portions), 44 116 in all: 27 771
+from USDA for 12 117 foods, 16 345 from the Canadian Nutrient File for 5 638.
+Ciqual, the Swiss table and CoFID publish none.
 
 ## Rebuild
 
@@ -61,7 +64,10 @@ laptop.
 
 `uv run food-data --help` lists the commands behind these targets and their
 options (`--only ciqual,swiss` to build some sources, `--min-free-gb` to
-protect the disk, `--override`, see below).
+protect the disk, `--override`, see below). `food-data build --dist <dir>
+--work <dir>` writes the database, and its scratch files, somewhere else
+than `dist/` and `work/`: a way to try a build beside a database being
+served from `dist/`.
 
 ## The sources and their licences
 
@@ -133,10 +139,12 @@ Aggregation rules:
 | `languages` | The language codes present in `names`. |
 | `display_names` | View applying the rule for the name to show. |
 | `versions` | Every version of the values of the foods that have more than one: `food_pk`, `position` (order of the build), `version_id`, `origin` (`source` or `user`), `votes`, `served` (the one in `foods`), then its source, values, portion, countries, flags, link and date. See [Versions of a food](#versions-of-a-food). |
+| `portions` | The household portions of the foods that have some, one row per portion: `food_pk`, `position` (those of the source in its order, then those added in Kratheos), `portion_id`, `origin` (`source` or `kratheos`), `labels` (JSON object: the label by language code), `amount` and `unit` (`g` or `ml`). See [Household portions](#household-portions). |
 | `sources` | Version, licence, attribution and `priority` (the fixed order) of each source. |
-| `meta` | Layout version (2), licence notice, the two helper queries below and `user_version_votes`. |
+| `meta` | Layout version (3; layout 2 is the same without `portions`), licence notice, the two helper queries below and `user_version_votes`. |
 
-Indexes: `foods(id)` and `foods(barcode)` are unique; `versions(version_id)`.
+Indexes: `foods(id)` and `foods(barcode)` are unique; `versions(version_id)`;
+`portions(portion_id)`.
 
 Scan a barcode. Normalise it first (see [Barcodes](#barcodes)):
 
@@ -347,6 +355,48 @@ One record per food of a source. Values are per 100 g, or per 100 ml when
 A record is kept when it has a name and an energy value. The others are
 counted in the manifest.
 
+### Household portions
+
+`serving_size`, `serving_unit` and `serving_text` hold the one serving a
+record gives of itself: the serving of the label of a packaged product. The
+food-composition tables that publish household portions give several per
+food ("1 large = 50 g", "1 cup", "1 slice"), which is what a person needs
+to log an egg without a scale. They are read by the adapters into a second
+staging file (`source_record_id`, `position`, `labels`, `amount`, `unit`)
+and written to the table `portions` of `food.sqlite`:
+
+| Source | What it publishes | What is read |
+| --- | --- | --- |
+| USDA Foundation Foods | a number, a measure and sometimes a precision | "1 cup, shredded", in English |
+| USDA SR Legacy | a number and the measure as text | "1 cup, chopped", "0.5 fillet", in English |
+| USDA FNDDS | the whole wording | "1 extra large egg", in English |
+| Canadian Nutrient File | measures worded in English and in French | "1 large egg" / "1 oeufs large (gros)", "250 ml" |
+| Ciqual, Swiss table, CoFID | nothing | nothing |
+
+Rules, the same for every source:
+
+- the label is the one of the source, in the languages it gives, never
+  translated; the amount is the weight in grams the source gives for the
+  label as a whole ("0.5 fillet" weighs what the file says). No source
+  gives a portion as a volume of its own, so every amount read is in `g`;
+- the order is the one of the source (its sequence number, or the order of
+  the lines of the Canadian file);
+- nothing is guessed: a portion is left out, and counted in the manifest,
+  when it has no weight, no wording (FNDDS writes "Quantity not specified"
+  for the amount it assumes when a survey gives none), when its measure is
+  a weight taken in the laboratory (Foundation Foods: a patty weighed raw,
+  then cooked), when the same line comes twice, or when its label is only a
+  weight ("100 g", "4 oz", "1 lb"): that says nothing about the food. A
+  volume stays ("250 ml", "1 fl oz"): its weight is the one of this food;
+- a portion belongs to the food its record is. Nothing is borrowed from the
+  "same" food of another table, and no weight is computed for a food
+  without one: the records of Ciqual and of the Swiss table get theirs from
+  the people who add them ([the Kratheos layer](#the-kratheos-layer)).
+
+`manifest.json` says how many foods and portions each source brought
+(`statistics.foods.portions`) and, source by source, what was read, kept and
+left out (`sources[].adapter.portions`).
+
 ### Units and conventions
 
 - **Basis.** 100 g, or 100 ml for the sources that say so. Open Food Facts
@@ -501,14 +551,19 @@ originals, aggregates the sources, then applies the layer:
 4. **`translations`**: a name for a food in a language it lacks. A
    translation never replaces a name given by the source; `names.origin`
    tells the two apart.
+5. **`portions`**: a household portion people added to a food ("1 oeuf
+   moyen", 50 g), with its label in the language it was written in. It is
+   offered to everyone after the portions the source gives, oldest first,
+   under `kratheos:p:<id>`; `portions.origin` tells the two apart.
 
 | Table | Columns |
 | --- | --- |
-| `meta` | `key`, `value`: `schema_version` (2), `exported_at` |
+| `meta` | `key`, `value`: `schema_version` (3), `exported_at` |
 | `translations` | `record_id`, `lang`, `name`, `origin` (`machine` or `human`), `updated_at` |
 | `products` | `id`, `kind`, `barcode`, `name`, `name_lang`, `names` (JSON), the value columns, `countries` (JSON), `updated_at` |
 | `versions` | `version_id`, `food_id`, the columns of a version, `countries` (JSON), `updated_at` |
 | `votes` | `version_id`, `food_id`, `votes`, `updated_at` |
+| `portions` | `portion_id`, `food_id`, `lang`, `label`, `amount`, `unit` (`g` or `ml`), `updated_at` |
 
 The value columns of a product are those of the common schema: `brand`,
 `category`, `basis`, `energy_kcal`, `protein_g`, `carbohydrate_g` (available
@@ -520,7 +575,8 @@ a version says what a food contains, not what it is. `record_id` and
 food with a barcode); `version_id` is a version of it.
 
 **Never who.** The file holds no account, no handle and no identifier of a
-person: who proposed a version or voted for one is not in it, only counts.
+person: who proposed a version, added a portion or voted is not in it, only
+counts.
 Its layout is closed: the build refuses a file that has a table or a column
 not listed above.
 
@@ -563,7 +619,8 @@ with it.
 
 `food-data serve` answers the API over HTTP: search as a person types,
 lookup by barcode, read by identifier, and the contributions of users
-(products added, versions of the values proposed, votes, names, reports).
+(products added, versions of the values proposed, votes, names, household
+portions, reports).
 [`docs/api.md`](docs/api.md) is its reference: the contract agreed with the
 Kratheos backend, and how the service implements it.
 
@@ -617,7 +674,7 @@ repository by default, never committed):
 | --- | --- | --- |
 | `food.sqlite` | The main database being served, read-only. Replaced in one step by a rebuild or an installation. | It is the public database. |
 | `manifest.json`, `identifiers.txt.gz` | The manifest and the identifier list of that build; the build date served comes from the manifest. | Public. |
-| `live.sqlite` (and `-wal`, `-shm` while running) | Everything entered through the service: products, versions, names; and what is private: the votes by hashed contributor key, the reports, what moderation hid, the history of writes (which hashed key wrote what), the keys moderation blocked and what is hidden with them. Mode 600. | Never as it is. Only through the export below. |
+| `live.sqlite` (and `-wal`, `-shm` while running) | Everything entered through the service: products, versions, names, portions; and what is private: the votes by hashed contributor key, the reports, what moderation hid, the history of writes (which hashed key wrote what), the keys moderation blocked and what is hidden with them. Mode 600. | Never as it is. Only through the export below. |
 | `contributor.key` | The secret the contributor keys are hashed with (HMAC-SHA-256), when `FOOD_DATA_KEY_SECRET` does not give it. Mode 600. | Never. |
 | `rebuild.json` | The report of the last rebuild. | No. |
 
@@ -632,15 +689,26 @@ nothing it has.
 What is written is visible at once, in search, by barcode and by identifier:
 every read puts the main database and the live database together. Once a
 rebuild has folded the live data into `food.sqlite`, both hold the same
-versions and the same names, each kept once, and the votes of a food are
-those of the live database alone: nothing is counted twice.
+versions, the same names and the same portions, each kept once, and the
+votes of a food are those of the live database alone: nothing is counted
+twice.
+
+**Portions.** A food record lists the portions of the food: the serving of
+the label of a packaged product, the [household portions](#household-portions)
+its source publishes, then those people added, each with its label in the
+language of the request (else English, else any). Anyone can add one to any
+food (a label in a language, an amount in g or ml): it is refused when the
+food already has it (the same label once accents, case and spaces are put
+aside, and the same amount within a gram), when it weighs less than 1 or
+more than 2000, and beyond ten added portions per food.
 
 **Moderation** needs the token too. A food is reported once per person, and
 the list of the reported foods tells how many different people reported each
 and why, the most reported first; reports hide nothing by themselves, a
-moderator hides or restores a food or one version. The products, the
-versions and the names that are published carry no author: the history kept
-in `live.sqlite` is the only link to the hashed key that wrote them. With
+moderator hides or restores a food, one version or one portion. The
+products, the versions, the names and the portions that are published carry
+no author: the history kept in `live.sqlite` is the only link to the hashed
+key that wrote them. With
 it a moderator sees what one key wrote, hides all of it and refuses its
 later writes in one call (its votes stop counting), and undoes both, which
 gives back exactly what was served before.
@@ -673,13 +741,13 @@ uv run food-data export-layer --commit --push   # and pushes, when a remote exis
 The file written has the [layout of the layer](#the-kratheos-layer) and
 holds what users see and nothing else: no contributor key, hashed or not, no
 report, nothing moderation hid (a hidden food is left out with everything
-attached to it, a hidden version with its votes), nothing a blocked key
-wrote and none of its votes. Votes are counts. The same
+attached to it, a hidden version with its votes, a hidden portion alone),
+nothing a blocked key wrote and none of its votes. Votes are counts. The same
 live data gives the same file, byte for byte, so a week without a change
 gives no commit; `--commit` commits that file only, whatever else changed in
 the repository. An export refuses to replace a layer that holds data by an
-empty one, or by one with a fifth fewer products, versions or names
-(`--force` to do it anyway): that is what a live database that lost its data,
+empty one, or by one with a fifth fewer products, versions, names or
+portions (`--force` to do it anyway): that is what a live database that lost its data,
 or never took the layer over, would do.
 
 ### The periodic rebuild

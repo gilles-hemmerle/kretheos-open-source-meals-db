@@ -9,9 +9,9 @@ Reads need no authentication. Writes and moderation need the shared token
 configured token they are refused altogether. Every error is
 `{"code": ..., "message": ...}` with the status of the contract.
 
-Writes are applied one at a time: the check that a barcode, a version or a
-name is not there yet and the write that follows cannot be separated by
-another write.
+Writes are applied one at a time: the check that a barcode, a version, a
+name or a portion is not there yet and the write that follows cannot be
+separated by another write.
 
 Moderation works on a food or a version (hide, restore, close its reports)
 and on a contributor key: what it wrote, hide all of it and refuse its later
@@ -41,6 +41,10 @@ from .validation import ApiError, invalid
 
 API_VERSION = 2
 MAX_USER_VERSIONS = 20
+MAX_USER_PORTIONS = 10
+# Two portions of a food are the same when their labels fold to the same text
+# and their amounts, in the same unit, are within this many g or ml.
+SAME_PORTION_TOLERANCE = 1.0
 READ_PARAMETERS = ("lang", "country")
 SEARCH_PARAMETERS = ("q", "lang", "country", "kind", "drink", "limit", "offset")
 PRODUCT_FIELDS = (
@@ -58,6 +62,7 @@ PRODUCT_FIELDS = (
 VERSION_FIELDS = ("basis", "nutrients", "servings", "countries", "contributor")
 VOTE_FIELDS = ("version_id", "contributor")
 TRANSLATION_FIELDS = ("language", "name", "contributor")
+PORTION_FIELDS = ("language", "label", "amount", "unit", "contributor")
 REPORT_FIELDS = ("reason", "note", "contributor")
 CONTRIBUTOR_FIELDS = ("contributor",)
 REPORT_STATES = (live.REPORT_OPEN, live.REPORT_CLOSED, "all")
@@ -71,10 +76,13 @@ ERROR_CODES = {
     "version_exists": 409,
     "name_exists": 409,
     "too_many_versions": 409,
+    "portion_exists": 409,
+    "too_many_portions": 409,
     "payload_too_large": 413,
     "invalid_request": 422,
     "invalid_barcode": 422,
     "implausible_values": 422,
+    "implausible_portion": 422,
     "internal_error": 500,
     "database_unavailable": 503,
     "writes_disabled": 503,
@@ -263,6 +271,8 @@ class Api:
                 return "POST", self._vote, (food_id,)
             case ["foods", food_id, "translations"]:
                 return "POST", self._translate, (food_id,)
+            case ["foods", food_id, "portions"]:
+                return "POST", self._add_portion, (food_id,)
             case ["foods", food_id, "reports"]:
                 return "POST", self._report, (food_id,)
             case ["barcodes", code]:
@@ -635,6 +645,51 @@ class Api:
             food = foods.find(context, food.id)
             return Response(200, foods.render_food(context, food, language, country))
 
+    def _add_portion(self, food_id: str, query: Mapping, headers: Mapping, body: bytes) -> Response:
+        """Add a household portion to a food, for everyone."""
+        self._authorize(headers)
+        self._parameters(query, READ_PARAMETERS)
+        language, country = self._locale(query)
+        data = validation.parse_body(body, PORTION_FIELDS)
+        key = validation.contributor(data)
+        fields = validation.portion(data)
+        folded = validation.fold(fields["label"])
+        with self._writing, self._context() as context:
+            self._refuse_blocked(context, key)
+            food = foods.find(context, validation.food_id(food_id))
+            if food is None:
+                raise not_found()
+            for existing in food.portions:
+                same_amount = (
+                    existing["unit"] == fields["unit"]
+                    and abs(existing["amount"] - fields["amount"]) <= SAME_PORTION_TOLERANCE
+                )
+                labels = {validation.fold(label) for label in existing["labels"].values()}
+                if same_amount and folded in labels:
+                    raise ApiError(
+                        409,
+                        "portion_exists",
+                        "this food already has this portion",
+                        portion_id=existing["portion_id"],
+                    )
+            added = [p for p in food.portions if p["origin"] == live.PORTION_ORIGIN]
+            if len(added) >= MAX_USER_PORTIONS:
+                raise ApiError(
+                    409,
+                    "too_many_portions",
+                    f"this food already has {MAX_USER_PORTIONS} portions added by users",
+                )
+            portion_id = kratheos.PORTION_PREFIX + str(uuid.uuid4())
+            self.store.add_portion(portion_id, food.id, fields, key)
+            food = foods.find(context, food.id)
+            return Response(
+                201,
+                {
+                    "portion_id": portion_id,
+                    "food": foods.render_food(context, food, language, country),
+                },
+            )
+
     def _report(self, food_id: str, query: Mapping, headers: Mapping, body: bytes) -> Response:
         """Record what a person reports about a food."""
         self._authorize(headers)
@@ -715,7 +770,7 @@ class Api:
     def _hide(
         self, record_id: str, hidden: bool, query: Mapping, headers: Mapping, body: bytes
     ) -> Response:
-        """Hide a food, or one of its versions, or show it again."""
+        """Hide a food, one of its versions or one of its portions, or show it again."""
         self._authorize(headers)
         self._parameters(query, ())
         record_id = validation.food_id(record_id)
@@ -770,25 +825,30 @@ class Api:
         return Response(200, {"id": food_id, "closed": closed})
 
     def _known_record(self, context: Context, record_id: str) -> bool:
-        """Tell whether an identifier is one of a food or of a version, hidden or not.
+        """Tell whether an identifier is one of a food, a version or a portion, hidden or not.
 
         Args:
             context: Both databases.
             record_id: The identifier.
 
         Returns:
-            True when a food or a version has it.
+            True when a food, a version or a portion has it.
         """
         return (
             foods.find(context, record_id, include_hidden=True) is not None
             or live.version_owner(context.live, record_id) is not None
             or catalogue.food_of_version(context.base, record_id) is not None
+            or live.portion_owner(context.live, record_id) is not None
+            or (
+                context.generation.has_portions
+                and catalogue.food_of_portion(context.base, record_id) is not None
+            )
         )
 
     def _record_contributors(
         self, record_id: str, query: Mapping, headers: Mapping, body: bytes
     ) -> Response:
-        """Give the keyed hashes of who wrote a food or a version."""
+        """Give the keyed hashes of who wrote a food, a version or a portion."""
         self._authorize(headers)
         self._parameters(query, ())
         record_id = validation.food_id(record_id)
@@ -813,11 +873,14 @@ class Api:
             written = live.written_by(context.live, author)
             record_ids = [product["record_id"] for product in written["products"]]
             record_ids += [version["version_id"] for version in written["versions"]]
+            record_ids += [portion["portion_id"] for portion in written["portions"]]
             hidden = live.hidden_among(context.live, record_ids)
             for product in written["products"]:
                 product["hidden"] = product["record_id"] in hidden
             for version in written["versions"]:
                 version["hidden"] = version["version_id"] in hidden
+            for portion in written["portions"]:
+                portion["hidden"] = portion["portion_id"] in hidden
             blocked_at = live.blocked_at(context.live, author)
             return Response(
                 200,

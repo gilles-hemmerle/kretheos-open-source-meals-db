@@ -48,15 +48,45 @@ Three things real data imposes:
 * Foundation Foods does the same on a small scale: `food.csv` still lists the
   earlier versions of the foods that were updated. Only the foods listed in
   `foundation_food.csv`, the current ones, are kept.
+
+Household portions. The three generic datasets publish, in `food_portion.csv`,
+what a cup, a slice or a large egg of a food weighs, several per food. Each
+dataset words them its own way, so each is read its own way and nothing is
+guessed:
+
+* Foundation Foods gives a number, a measure (`measure_unit.csv`: cup, slice,
+  egg) and sometimes a precision: "1 cup, shredded";
+* SR Legacy gives a number and the measure as free text: "1 cup, chopped",
+  "0.5 fillet";
+* FNDDS gives the whole wording: "1 extra large egg".
+
+The weight is the one of the number of measures the label names ("4 slices"
+weigh what the file says, not four times it). A portion is left out, and
+counted, when it has no weight, no wording (FNDDS writes "Quantity not
+specified" for the amount it assumes when a survey gives none), when its
+measure is a weight taken in the laboratory (a patty weighed raw, then
+cooked), or when its label is only a weight ("4 oz", "1 lb"). Branded Foods
+keeps the serving of its label, as before.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import duckdb
+
 from .. import schema
 from ..config import Source
-from .base import AdapterContext, AdapterResult, extract_members, sql_string, write_staging_query
+from .base import (
+    WEIGHT_ONLY_LABEL,
+    AdapterContext,
+    AdapterResult,
+    extract_members,
+    sql_string,
+    whole_number_sql,
+    write_portions_query,
+    write_staging_query,
+)
 
 FOOD_URL = "https://fdc.nal.usda.gov/food-details/"
 BEVERAGE_CATEGORY = "Beverages"
@@ -120,6 +150,25 @@ COUNTRY_CODES = {
     "canada": "CA",
     "ca": "CA",
 }
+# The two tables the portions of a generic dataset are read from.
+PORTION_MEMBERS = ["food_portion.csv", "measure_unit.csv"]
+# Measure a dataset writes when it names none: the wording is then elsewhere.
+UNDETERMINED_MEASURE = "undetermined"
+# Measures of Foundation Foods that are weights taken in the laboratory, not
+# portions a person eats: a sample weighed raw then cooked, its drippings.
+LABORATORY_MEASURES = ("paired cooked w", "paired raw w", "dripping w", "orig ckd g", "orig rw g")
+# What FNDDS writes for the amount it assumes when a survey gives none.
+NOT_SPECIFIED = "quantity not specified"
+# Why a portion is left out, in the order the reasons are tested.
+PORTION_REASONS = (
+    "no_weight",
+    "laboratory_weight",
+    "quantity_not_specified",
+    "no_wording",
+    "only_a_weight",
+    "repeated",
+)
+
 # Market countries whose labels give available carbohydrate, fibre excluded
 # (Australia New Zealand Food Standards Code, Standard 1.2.8). Everywhere else
 # Branded Foods carries the total carbohydrate of North American labels.
@@ -350,22 +399,149 @@ def branded_sql(files: dict[str, Path]) -> str:
     """
 
 
+def portions_sql(dataset: str, files: dict[str, Path]) -> str:
+    """Build the SELECT reading and judging the portions of a generic dataset.
+
+    Only the portions of the foods the dataset keeps are read (the current
+    version of each stable key, as `generic_sql` does). Each row gets its
+    label, worded the way of its dataset, and the reason it is left out, if
+    any.
+
+    Args:
+        dataset: Dataset label: foundation, sr_legacy or fndds.
+        files: Extracted files of the dataset, by base name.
+
+    Returns:
+        A SELECT with `dataset`, `source_record_id`, `seq`, `row_id` (the
+        order of the source), `label`, `amount` (grams) and `reason` (NULL
+        for a portion that is kept).
+    """
+    key_table, key_column = STABLE_KEYS[dataset]
+    number = whole_number_sql("number")
+    if dataset == "fndds":
+        label = "description"
+    elif dataset == "sr_legacy":
+        label = f"CASE WHEN number > 0 THEN {number} || ' ' || modifier END"
+    else:
+        label = (
+            "CASE WHEN number > 0 AND coalesce(measure, description, modifier) IS NOT NULL"
+            f" THEN {number} || ' ' || concat_ws(', ', measure, description, modifier) END"
+        )
+    laboratory = ", ".join(f"'{name}'" for name in LABORATORY_MEASURES)
+    order = "seq NULLS LAST, row_id"
+    return f"""
+        WITH kept AS (
+            SELECT fdc_id, trim({key_column}) AS stable FROM {csv_relation(files[key_table])}
+            WHERE nullif(trim({key_column}), '') IS NOT NULL
+            QUALIFY row_number() OVER (
+                PARTITION BY trim({key_column}) ORDER BY try_cast(fdc_id AS BIGINT) DESC
+            ) = 1
+        ),
+        read AS (
+            SELECT
+                '{dataset}:' || k.stable AS source_record_id,
+                try_cast(p.seq_num AS INTEGER) AS seq,
+                try_cast(p.id AS BIGINT) AS row_id,
+                try_cast(p.amount AS DOUBLE) AS number,
+                CASE WHEN lower(trim(u.name)) = '{UNDETERMINED_MEASURE}' THEN NULL
+                     ELSE nullif(trim(u.name), '') END AS measure,
+                nullif(regexp_replace(trim(p.portion_description), '\\s+', ' ', 'g'), '')
+                    AS description,
+                nullif(regexp_replace(trim(p.modifier), '\\s+', ' ', 'g'), '') AS modifier,
+                round(try_cast(p.gram_weight AS DOUBLE), 4) AS amount
+            FROM {csv_relation(files["food_portion.csv"])} AS p
+            JOIN kept AS k ON k.fdc_id = p.fdc_id
+            LEFT JOIN {csv_relation(files["measure_unit.csv"])} AS u ON u.id = p.measure_unit_id
+        ),
+        worded AS (
+            SELECT *, {label} AS label FROM read
+        ),
+        judged AS (
+            SELECT
+                source_record_id, seq, row_id, label, amount,
+                CASE
+                    WHEN amount IS NULL OR amount <= 0 THEN 'no_weight'
+                    WHEN lower(measure) IN ({laboratory}) THEN 'laboratory_weight'
+                    WHEN lower(description) = '{NOT_SPECIFIED}' THEN 'quantity_not_specified'
+                    WHEN label IS NULL THEN 'no_wording'
+                    WHEN regexp_matches(lower(label), '{WEIGHT_ONLY_LABEL}') THEN 'only_a_weight'
+                END AS reason
+            FROM worded
+        )
+        SELECT
+            '{dataset}' AS dataset, source_record_id, seq, row_id, label, amount,
+            CASE
+                WHEN reason IS NULL AND row_number() OVER (
+                    PARTITION BY source_record_id, reason IS NULL, lower(label), amount
+                    ORDER BY {order}
+                ) > 1 THEN 'repeated'
+                ELSE reason
+            END AS reason
+        FROM judged
+    """
+
+
+def portion_statistics(con: duckdb.DuckDBPyConnection) -> dict:
+    """Count the portions read, kept and left out, per generic dataset.
+
+    Args:
+        con: DuckDB connection holding the table `usda_portions`.
+
+    Returns:
+        For each dataset: `in_source`, `kept`, `foods` (those with at least
+        one portion kept) and `left_out`, the number left out by reason.
+    """
+    counted: dict = {}
+    for dataset in STABLE_KEYS:
+        in_source, kept, foods = con.execute(
+            """
+            SELECT count(*), count(*) FILTER (WHERE reason IS NULL),
+                   count(DISTINCT source_record_id) FILTER (WHERE reason IS NULL)
+            FROM usda_portions WHERE dataset = ?
+            """,
+            [dataset],
+        ).fetchone()
+        reasons = dict(
+            con.execute(
+                "SELECT reason, count(*) FROM usda_portions"
+                " WHERE dataset = ? AND reason IS NOT NULL GROUP BY 1",
+                [dataset],
+            ).fetchall()
+        )
+        counted[dataset] = {
+            "in_source": in_source,
+            "kept": kept,
+            "foods": foods,
+            "left_out": {
+                reason: reasons[reason] for reason in PORTION_REASONS if reason in reasons
+            },
+        }
+    return counted
+
+
 def build(source: Source, context: AdapterContext) -> AdapterResult:
-    """Write the staging file of USDA FoodData Central.
+    """Write the staging file of USDA FoodData Central, and its portions.
 
     Args:
         source: The USDA entry of the source list.
         context: The adapter context.
 
     Returns:
-        The row counts per dataset and the number of superseded branded
-        versions left out.
+        The row counts per dataset, the number of superseded branded
+        versions left out and, per generic dataset, the portions read, kept
+        and left out.
     """
     con = context.con
     selects = []
     stats: dict = {}
+    con.execute(
+        "CREATE OR REPLACE TEMP TABLE usda_portions (dataset VARCHAR, source_record_id VARCHAR,"
+        " seq INTEGER, row_id BIGINT, label VARCHAR, amount DOUBLE, reason VARCHAR)"
+    )
     for archive_name, (dataset, data_type, extra) in DATASETS.items():
         members = ["food.csv", "food_nutrient.csv", *extra]
+        if dataset in STABLE_KEYS:
+            members += PORTION_MEMBERS
         context.log(f"  extracting {archive_name}")
         files = extract_members(context.file(archive_name), members, context.work_dir / dataset)
         rows = con.execute(
@@ -377,8 +553,25 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
             selects.append(branded_sql(files))
         else:
             selects.append(generic_sql(dataset, data_type, files, source.country))
+            con.execute("INSERT INTO usda_portions BY NAME " + portions_sql(dataset, files))
     union = "\nUNION ALL BY NAME\n".join(f"({select})" for select in selects)
     written = write_staging_query(context, union)
+    write_portions_query(
+        context,
+        """
+        SELECT
+            source_record_id,
+            row_number() OVER (PARTITION BY source_record_id ORDER BY seq NULLS LAST, row_id)
+                AS position,
+            MAP {'en': label} AS labels,
+            amount,
+            'g' AS unit
+        FROM usda_portions
+        WHERE reason IS NULL
+        """,
+    )
+    stats["portions"] = portion_statistics(con)
+    con.execute("DROP TABLE usda_portions")
     staged = dict(
         con.execute(
             f"SELECT source_dataset, count(*) FROM read_parquet({sql_string(context.staging_path)})"

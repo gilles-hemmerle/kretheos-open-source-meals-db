@@ -3,10 +3,11 @@
 The file written has the closed layout the build enforces (`kratheos.py`),
 and holds what users see and nothing else:
 
-* the products added, the versions proposed and the names added, except what
-  moderation hid: a hidden food is left out with everything attached to it,
-  a hidden version with its votes. What a blocked contributor key wrote is
-  hidden the same way, for as long as the key is blocked;
+* the products added, the versions proposed, the names and the household
+  portions added, except what moderation hid: a hidden food is left out with
+  everything attached to it, a hidden version with its votes, a hidden
+  portion alone. What a blocked contributor key wrote is hidden the same
+  way, for as long as the key is blocked;
 * the votes as one count per version, those of a blocked key left out. The
   table saying which contributor key voted for what is never read by this
   module: counting is done in SQL, and no key, hashed or not, reaches the
@@ -20,8 +21,8 @@ the live database rather than the time of the export. An export of a live
 database that holds nothing is the empty file `kratheos-init` creates.
 
 An export never quietly shrinks the layer: it is refused when the live
-database holds nothing, or a fifth fewer products, versions or names than
-the file it would replace. That is what a live database that lost its data,
+database holds nothing, or a fifth fewer products, versions, names or
+portions than the file it would replace. That is what a live database that lost its data,
 or never took a published layer over, would do.
 (Byte for byte holds for one version of the SQLite library, which writes its
 own version number in the header of the files it creates.)
@@ -91,9 +92,11 @@ def read_live(path: Path) -> kratheos.Layer:
         connection.execute("PRAGMA query_only = 1")
         connection.execute("BEGIN")
         hidden = {row[0] for row in connection.execute("SELECT record_id FROM hidden")}
-        # A live database no service opened since layout 2 has no blocked key.
+        # A live database no service opened since layout 2 has no blocked key,
+        # and one no service opened since layout 3 has no portion.
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master")}
         blocks = "blocked" in tables and "withdrawn" in tables
+        with_portions = "portions" in tables
         withdrawn_names: set[tuple[str, str]] = set()
         if blocks:
             for row in connection.execute("SELECT record_id, lang FROM withdrawn"):
@@ -112,6 +115,7 @@ def read_live(path: Path) -> kratheos.Layer:
                 ("anonymous_votes", "updated_at"),
                 ("hidden", "hidden_at"),
                 *((("blocked", "blocked_at"),) if blocks else ()),
+                *((("portions", "updated_at"),) if with_portions else ()),
             )
         ]
         layer.meta["exported_at"] = max((stamp for stamp in latest if stamp), default="")
@@ -164,6 +168,24 @@ def read_live(path: Path) -> kratheos.Layer:
                 }
             )
 
+        added = (
+            "SELECT * FROM portions ORDER BY portion_id" if with_portions else "SELECT 1 LIMIT 0"
+        )
+        for row in connection.execute(added):
+            if row["food_id"] in hidden or row["portion_id"] in hidden:
+                continue
+            layer.portions.append(
+                {
+                    "portion_id": row["portion_id"],
+                    "food_id": row["food_id"],
+                    "lang": row["lang"],
+                    "label": row["label"],
+                    "amount": row["amount"],
+                    "unit": row["unit"],
+                    "updated_at": _day(row["updated_at"]),
+                }
+            )
+
         not_blocked = "WHERE contributor NOT IN (SELECT contributor FROM blocked)" if blocks else ""
         counted = connection.execute(
             f"""
@@ -210,7 +232,7 @@ def write_layer(layer: kratheos.Layer, path: Path) -> None:
         connection = sqlite3.connect(partial)
         try:
             with connection:
-                for table in ("products", "versions", "votes", "translations"):
+                for table in ("products", "versions", "votes", "translations", "portions"):
                     columns = [name for name, _ in kratheos.TABLES[table]]
                     connection.executemany(
                         f"INSERT INTO {table} ({', '.join(columns)})"
@@ -258,7 +280,7 @@ def export_layer(live_path: Path, out: Path, force: bool = False) -> dict:
                 f"{live_path} holds nothing while {out} holds {previous.rows} rows: not"
                 f" replaced.{advice}"
             )
-        for table in ("products", "versions", "translations"):
+        for table in ("products", "versions", "translations", "portions"):
             had, has = len(getattr(previous, table)), len(getattr(layer, table))
             if had >= MIN_ROWS_TO_JUDGE and has < had * (1 - MAX_SHRINK):
                 raise ExportRefused(
@@ -275,6 +297,7 @@ def export_layer(live_path: Path, out: Path, force: bool = False) -> dict:
         "votes": sum(row["votes"] for row in layer.votes),
         "voted_versions": len(layer.votes),
         "translations": len(layer.translations),
+        "portions": len(layer.portions),
         "exported_at": layer.meta["exported_at"],
         "sha256": after,
         "changed": after != before,
@@ -347,7 +370,8 @@ def commit_layer(path: Path, summary: dict, push: bool = False, log: Logger = pr
         f"data: the Kratheos layer exported on {today}\n\n"
         f"{summary['products']} products, {summary['versions']} versions,"
         f" {summary['votes']} votes on {summary['voted_versions']} versions,"
-        f" {summary['translations']} names. Latest entry: {summary['exported_at'] or 'none'}."
+        f" {summary['translations']} names, {summary['portions']} portions."
+        f" Latest entry: {summary['exported_at'] or 'none'}."
     )
     _git(repository, "add", "--", relative)
     _git(repository, *identity, "commit", "--quiet", "-m", message, "--", relative)

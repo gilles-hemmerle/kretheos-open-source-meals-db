@@ -248,6 +248,7 @@ def test_what_a_key_wrote_and_who_wrote_a_record(service: Running) -> None:
         "products": 2,
         "versions": 1,
         "translations": 2,
+        "portions": 0,
         "votes": 3,
         "reports": 1,
     }
@@ -362,7 +363,7 @@ def test_blocking_a_key_hides_what_it_wrote_and_the_undo_restores_exactly(
     assert status == 200
     assert set(done) == {"blocked", "contributor", "blocked_at", "withdrawn"}
     assert (done["blocked"], done["contributor"]) == (True, alice)
-    assert done["withdrawn"] == {"products": 2, "versions": 1, "translations": 1}
+    assert done["withdrawn"] == {"products": 2, "versions": 1, "translations": 1, "portions": 0}
 
     # What the key wrote is invisible, like any hidden record.
     assert service.get(f"/v1/foods/{spam['id']}")[0] == 404
@@ -431,7 +432,7 @@ def test_blocking_a_key_hides_what_it_wrote_and_the_undo_restores_exactly(
         "blocked": False,
         "blocked_at": None,
         "contributor": alice,
-        "restored": {"products": 2, "versions": 1, "translations": 1},
+        "restored": {"products": 2, "versions": 1, "translations": 1, "portions": 0},
     }
     assert seen(service, targets) == before
     assert service.food(NUTELLA)["version_id"] == by_bob and service.food(NUTELLA)["votes"] == 3
@@ -445,7 +446,7 @@ def test_blocking_a_key_hides_what_it_wrote_and_the_undo_restores_exactly(
     assert restored.meta == exported_before.meta
     assert vote(service, NUTELLA, OFF_VERSION, ALICE)[0] == 200  # the key writes again
     unknown = service.post("/v1/moderation/contributors/unblock", {"contributor": CAROL})[1]
-    assert unknown["restored"] == {"products": 0, "versions": 0, "translations": 0}
+    assert unknown["restored"] == {"products": 0, "versions": 0, "translations": 0, "portions": 0}
 
 
 def _table(service: Running, table: str) -> list[tuple]:
@@ -475,13 +476,13 @@ def test_a_name_given_by_somebody_else_during_a_block_stays(service: Running) ->
     status, food = service.post(f"/v1/foods/{APRICOT}/translations?lang=de", better)
     assert status == 200 and food["name"] == "Aprikose, roh"
     undone = service.post("/v1/moderation/contributors/unblock", {"contributor": ALICE})[1]
-    assert undone["restored"] == {"products": 0, "versions": 0, "translations": 0}
+    assert undone["restored"] == {"products": 0, "versions": 0, "translations": 0, "portions": 0}
     assert service.food(APRICOT, "lang=de")["name"] == "Aprikose, roh"
     assert service.found("q=aprikose") == [APRICOT] and service.found("q=unsinn") == []
 
 
 def test_a_live_database_of_the_earlier_layout_is_upgraded(tmp_path: Path) -> None:
-    """Layout 1 gains the tables of layout 2 when it is opened, and loses nothing."""
+    """Layout 1 gains the tables of layouts 2 and 3 when it is opened, and loses nothing."""
     path = tmp_path / "live.sqlite"
     store = LiveStore(path, KEY_SECRET.encode())
     store.report(NUTELLA, "other", "note", BOB)
@@ -491,6 +492,7 @@ def test_a_live_database_of_the_earlier_layout_is_upgraded(tmp_path: Path) -> No
         """
         DROP TABLE blocked;
         DROP TABLE withdrawn;
+        DROP TABLE portions;
         DROP INDEX reports_food;
         DROP INDEX history_record;
         DROP INDEX history_contributor;
@@ -506,9 +508,14 @@ def test_a_live_database_of_the_earlier_layout_is_upgraded(tmp_path: Path) -> No
     assert reader.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()[0] == (
         str(live.SCHEMA_VERSION)
     )
-    assert live.SCHEMA_VERSION == 2
+    assert live.SCHEMA_VERSION == 3
     assert live.open_reports_of(reader, NUTELLA) == {"reporters": 1, "reasons": {"other": 1}}
-    assert store.block(ALICE)["withdrawn"] == {"products": 0, "versions": 0, "translations": 0}
+    assert store.block(ALICE)["withdrawn"] == {
+        "products": 0,
+        "versions": 0,
+        "translations": 0,
+        "portions": 0,
+    }
     assert live.blocked_at(reader, store.contributor_hash(ALICE)) is not None
     reader.close()
     store.close()

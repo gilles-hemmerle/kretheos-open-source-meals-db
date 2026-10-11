@@ -14,6 +14,9 @@ repository, and is applied by the build after the sources are aggregated:
   version proposed by a user (`kratheos:v:<id>`);
 * `translations`: names Kratheos adds to a food in a language its source
   does not give. A translation never replaces a name given by the source;
+* `portions`: household portions people add to a food ("1 oeuf moyen", 50 g),
+  with their label in the language they were written in. A portion never
+  replaces one the source gives: it is offered after them, to everyone;
 * `meta`: version of this layout and date of the last export from Kratheos.
 
 Never who: the file holds no account, no handle and no identifier of a
@@ -34,7 +37,7 @@ import duckdb
 from . import schema
 from .config import MIRROR_GIT, Source
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SOURCE_ID = "kratheos"
 FILE_NAME = "kratheos.sqlite"
 TRANSLATION_ORIGINS = ("machine", "human")
@@ -42,6 +45,12 @@ TRANSLATION_ORIGINS = ("machine", "human")
 # a product added in Kratheos is `kratheos:<id>`, so a product id never starts
 # with `v:`.
 VERSION_PREFIX = f"{SOURCE_ID}:v:"
+# Identifier of a portion added by a user: `kratheos:p:<id>`; a product id
+# never starts with `p:` either. A portion given by a source is identified
+# by its food and its position: `<food id>:p:<position>`.
+PORTION_PREFIX = f"{SOURCE_ID}:p:"
+PORTION_MARK = ":p:"
+PORTION_UNITS = schema.PORTION_UNITS
 LICENCE = "ODbL-1.0"
 
 NUTRIENT_COLUMNS = (
@@ -106,6 +115,15 @@ TABLES: dict[str, tuple[tuple[str, str], ...]] = {
         ("votes", "INTEGER"),
         ("updated_at", "TEXT"),
     ),
+    "portions": (
+        ("portion_id", "TEXT"),
+        ("food_id", "TEXT"),
+        ("lang", "TEXT"),
+        ("label", "TEXT"),
+        ("amount", "REAL"),
+        ("unit", "TEXT"),
+        ("updated_at", "TEXT"),
+    ),
 }
 
 _VALUE_DDL = ",\n    ".join(f"{name} {kind}" for name, kind in VALUE_COLUMNS)
@@ -134,7 +152,7 @@ CREATE TABLE translations (
 -- 100 g or 100 ml (basis); carbohydrate_g is available carbohydrate, fibre
 -- excluded, as on European labels.
 CREATE TABLE products (
-    id TEXT PRIMARY KEY CHECK (id NOT LIKE 'v:%'),
+    id TEXT PRIMARY KEY CHECK (id NOT LIKE 'v:%' AND id NOT LIKE 'p:%'),
     kind TEXT NOT NULL DEFAULT 'product' CHECK (kind IN ('generic', 'product')),
     barcode TEXT,              -- optional; a restaurant item has none
     name TEXT NOT NULL,
@@ -164,6 +182,18 @@ CREATE TABLE votes (
     version_id TEXT PRIMARY KEY,
     food_id TEXT NOT NULL,     -- the food the version belongs to
     votes INTEGER NOT NULL CHECK (votes >= 0),
+    updated_at TEXT NOT NULL
+) WITHOUT ROWID;
+
+-- A household portion a user added to a food: "1 oeuf moyen" weighs 50 g.
+-- Offered to everyone after the portions the source gives. Never who added it.
+CREATE TABLE portions (
+    portion_id TEXT PRIMARY KEY CHECK (portion_id LIKE '{PORTION_PREFIX}%'),
+    food_id TEXT NOT NULL,     -- identifier of the food in food.sqlite, e.g. ciqual:22000
+    lang TEXT NOT NULL,        -- language code of the label
+    label TEXT NOT NULL,       -- the portion as a person words it
+    amount REAL NOT NULL CHECK (amount > 0),   -- what one portion weighs or holds
+    unit TEXT NOT NULL CHECK (unit IN ('g', 'ml')),
     updated_at TEXT NOT NULL
 ) WITHOUT ROWID;
 """
@@ -209,6 +239,7 @@ class Layer:
         versions: Rows of `versions`, as dictionaries.
         votes: Rows of `votes`, as dictionaries.
         translations: Rows of `translations`, as dictionaries.
+        portions: Rows of `portions`, as dictionaries.
     """
 
     meta: dict[str, str] = field(default_factory=dict)
@@ -216,11 +247,18 @@ class Layer:
     versions: list[dict] = field(default_factory=list)
     votes: list[dict] = field(default_factory=list)
     translations: list[dict] = field(default_factory=list)
+    portions: list[dict] = field(default_factory=list)
 
     @property
     def rows(self) -> int:
         """Return the number of rows the layer holds, every table together."""
-        return len(self.products) + len(self.versions) + len(self.votes) + len(self.translations)
+        return (
+            len(self.products)
+            + len(self.versions)
+            + len(self.votes)
+            + len(self.translations)
+            + len(self.portions)
+        )
 
 
 # Table -> column its rows are read in the order of, so that a layer always
@@ -230,6 +268,7 @@ ROW_ORDER = {
     "versions": "version_id",
     "votes": "version_id",
     "translations": "record_id, lang",
+    "portions": "portion_id",
 }
 
 
@@ -314,13 +353,19 @@ def read_layer(path: Path) -> Layer:
     finally:
         connection.close()
     for product in layer.products:
-        if str(product["id"]).startswith("v:"):
-            raise LayerError(f"product {product['id']}: an id may not start with 'v:'")
+        if str(product["id"]).startswith(("v:", "p:")):
+            raise LayerError(f"product {product['id']}: an id may not start with 'v:' or 'p:'")
     for version in layer.versions:
         if not str(version["version_id"]).startswith(VERSION_PREFIX):
             raise LayerError(
                 f"version {version['version_id']}: the id must start with {VERSION_PREFIX}"
             )
+    for portion in layer.portions:
+        what = f"portion {portion['portion_id']}"
+        if not str(portion["portion_id"]).startswith(PORTION_PREFIX):
+            raise LayerError(f"{what}: the id must start with {PORTION_PREFIX}")
+        if portion["unit"] not in PORTION_UNITS or not portion["amount"] > 0:
+            raise LayerError(f"{what}: the amount must be above 0, in g or ml")
     return layer
 
 
@@ -425,10 +470,10 @@ def product_staging_rows(layer: Layer) -> list[dict]:
 
 
 def load_tables(con: duckdb.DuckDBPyConnection, layer: Layer) -> None:
-    """Load versions, votes and translations into DuckDB tables.
+    """Load versions, votes, translations and portions into DuckDB tables.
 
-    Creates `kratheos_versions`, `kratheos_votes` and `kratheos_translations`,
-    empty when the layer is.
+    Creates `kratheos_versions`, `kratheos_votes`, `kratheos_translations`
+    and `kratheos_portions`, empty when the layer is.
 
     Args:
         con: DuckDB connection of the build.
@@ -481,3 +526,22 @@ def load_tables(con: duckdb.DuckDBPyConnection, layer: Layer) -> None:
     ]
     if translations:
         con.executemany("INSERT INTO kratheos_translations VALUES (?, ?, ?, ?)", translations)
+    con.execute(
+        "CREATE OR REPLACE TEMP TABLE kratheos_portions (portion_id VARCHAR, food_id VARCHAR,"
+        " lang VARCHAR, label VARCHAR, amount DOUBLE, unit VARCHAR, updated_at VARCHAR)"
+    )
+    portions = [
+        (
+            row["portion_id"],
+            row["food_id"],
+            row["lang"],
+            " ".join(row["label"].split()),
+            row["amount"],
+            row["unit"],
+            str(row["updated_at"])[:10],
+        )
+        for row in layer.portions
+        if row["label"].strip()
+    ]
+    if portions:
+        con.executemany("INSERT INTO kratheos_portions VALUES (?, ?, ?, ?, ?, ?, ?)", portions)

@@ -3,7 +3,11 @@
 This document is the reference of the HTTP API served by `food-data serve`.
 
 Its first part is the contract agreed with the Kratheos backend, the only
-client of the service in production, copied as it was written (version 2).
+client of the service in production, copied as it was written (version 2)
+and amended since for the household portions: `servings` now lists several
+portions, and `POST /v1/foods/{id}/portions` adds one. Nothing else moved,
+so the version stays 2: a client that reads the first portion of `servings`
+as before still works.
 Its second part says how this service implements it: what is added, where
 the data cannot say what the contract asks and what is served instead, how
 search behaves, the errors, the limits.
@@ -17,7 +21,8 @@ repository `kratheos-food-data`; the Kratheos backend is its only client in prod
 
 - The food service reads `food.sqlite` (built from the open sources and the Kratheos layer)
   and owns the live Kratheos layer (products added, versions of the values proposed by
-  users, votes, translations, reports). It knows no person: only an opaque contributor key.
+  users, votes, translations, household portions, reports). It knows no person: only an
+  opaque contributor key.
 - The Kratheos backend authenticates the person, checks consent and rate limits, converts
   nothing (the service is metric only), and copies the values of a food into the person's
   diary, favourites and recipes. The app never calls the food service directly.
@@ -51,7 +56,8 @@ repository `kratheos-food-data`; the Kratheos backend is its only client in prod
     "fat_g": 30.9, "saturated_fat_g": 10.6, "fibre_g": null, "salt_g": 0.107,
     "alcohol_g": null
   },
-  "servings": [{"label": "15 g", "amount": 15, "unit": "g"}],
+  "servings": [{"label": "15 g", "amount": 15, "unit": "g"},
+               {"label": "1 cuillère à soupe", "amount": 20, "unit": "g"}],
   "source": {"id": "off", "title": "Open Food Facts", "licence": "ODbL-1.0", "url": "https://..."},
   "version_id": "off:3017620422003",
   "version_origin": "source",
@@ -70,6 +76,11 @@ repository `kratheos-food-data`; the Kratheos backend is its only client in prod
   request: that language, else English, else any; `name_language` says which one was used and
   `name_origin` whether it comes from the source or from Kratheos (`source` or `kratheos`).
 - `nutrients` values are numbers or null when unknown.
+- `servings` lists the portions the food offers, each `{label, amount, unit}` with the amount
+  in g or ml: the portion of the version served (the serving of a label), when it has one,
+  then the household portions of the food: those its source publishes ("1 large", 50 g),
+  in the order of the source, then those people added, oldest first. `label` is resolved
+  like `name`: the `lang` of the request, else English, else any. May be empty.
 - `source.id`: `off`, `usda`, `ciqual`, `swiss`, `chain`, `kratheos`, or another source id.
   It is the source of the version served (see « Versions and votes »).
 - `version_id`, `version_origin` (`source` or `user`), `votes`: the version of the values
@@ -121,7 +132,8 @@ served.
 - `nutrients.alcohol_g` (grams per 100 g or 100 ml, null when unknown) is part of every
   record and version and is accepted on writes; the energy check of the writes counts it.
 - `is_drink` false means "not known to be a drink". `flags` are free strings of the build,
-  except `versions_disagree`. `servings` holds at most one portion.
+  except `versions_disagree`. `servings` of a version holds at most one portion, its own;
+  `servings` of a food record holds every portion of the food (see « Food record »).
 - The service refuses unknown fields and unknown query parameters (422).
 
 ### Read endpoints
@@ -159,6 +171,13 @@ and never exports it.
   version.
 - `POST /v1/foods/{id}/translations` with `{"language": "es", "name": "...",
   "contributor": "..."}`. A name given by the source is never replaced: 409 `name_exists`.
+- `POST /v1/foods/{id}/portions?lang=fr&country=FR` with `{"language": "fr", "label":
+  "1 œuf moyen", "amount": 50, "unit": "g" | "ml", "contributor": "..."}` adds a household
+  portion to a food, for everyone. Returns `{"portion_id": "kratheos:p:<uuid>", "food":
+  <food record>}` (201), the record as `lang` and `country` read it. 409 `portion_exists`
+  with the `portion_id` of the portion the food already has (same label once case, accents
+  and spaces are put aside, same amount within 1 g or ml); 422 `implausible_portion` for an
+  amount under 1 or above 2000; 409 `too_many_portions` beyond 10 added portions per food.
 - `POST /v1/foods/{id}/reports` with `{"reason": "wrong_values" | "duplicate" |
   "inappropriate" | "other", "note": "", "contributor": "..."}`. Returns 202.
 
@@ -211,12 +230,24 @@ served.
    be one". The database holds three states (yes, no, unknown: 1.8 of 3.6
    million foods) and the contract a boolean. `drink=true` returns what a
    source classifies as a beverage, `drink=false` everything else.
-5. **`servings` holds at most one portion**, in every answer: a list of one
-   element, or empty. Every source gives at most one portion per record and
-   the layer stores one per version. A request may send several: the first
-   is kept, the others are ignored, and the answer shows what was kept. A record whose source words a portion without giving
-   its size has none. When the source gives no label, the label is the size
-   (`"30 g"`).
+5. **`servings` holds several portions in a food record, and at most one
+   in a version.** A version has the one portion its record gives (the
+   serving of a label); the layer stores one per version too. A request
+   that creates a product or proposes a version may send several: the first
+   is kept, the others are ignored, and the answer shows what was kept. A
+   record whose source words a portion without giving its size has none.
+   When the source gives no label, the label is the size (`"30 g"`).
+   A food record lists that portion of the version served first, then the
+   household portions of the food (table `portions` of `food.sqlite`, and
+   those added since the build). Those belong to the food, not to a
+   version: they do not change with the votes or the country. The sources
+   that publish some are USDA (in English) and the Canadian Nutrient File
+   (in English and in French); a food of Ciqual, of the Swiss table or of
+   CoFID has those people added, or none. Their amounts are weights in
+   grams, whatever the label says ("250 ml" of a food of the Canadian file
+   weighs what the file gives); a portion people add is in `g` or in `ml`
+   as they say. The service never converts one into the other: a client
+   uses the portions whose unit it can count the food in.
 6. **`updated_at` is a day**, written at midnight UTC: the sources and the
    layer store dates.
 7. **Alcohol.** `nutrients.alcohol_g` (grams per 100 g or 100 ml) is part
@@ -294,8 +325,9 @@ served.
   `meta.user_version_votes` of `food.sqlite`.
 - **`country` on the writes.** `POST /v1/foods/{id}/versions` and
   `POST /v1/foods/{id}/votes` accept `?country=`, like the read, so that
-  `served` in their answer is the one of the person. `POST /v1/products` and
-  `POST /v1/foods/{id}/translations` accept `?lang=` and `?country=`.
+  `served` in their answer is the one of the person. `POST /v1/products`,
+  `POST /v1/foods/{id}/translations` and `POST /v1/foods/{id}/portions`
+  accept `?lang=` and `?country=`.
 - **`version_exists`** compares `basis` and the nine nutrients, after the
   rounding of the build (4 decimals), with every visible version of the
   food. Portions and countries are not values: proposing the same values
@@ -306,6 +338,31 @@ served.
   for is the same list, unchanged. Votes taken over from a `kratheos.sqlite`
   written elsewhere are counts without a key: they count, and nobody can
   move them.
+
+### Portions added by people, precisely
+
+- **Identifiers.** A portion added through the service is
+  `kratheos:p:<uuid>`. A portion of a source is `<food id>:p:<position>`
+  (`cnf:125:p:1`): its place in the order of the source, which may move
+  when the publisher reorders its file. Neither is part of `servings`; they
+  serve `portion_exists` and moderation.
+- **The same portion.** `portion_exists` compares the new portion with every
+  visible portion of the food, of the source or added: the same unit, an
+  amount within 1 (g or ml), and a label that is the same as one of its
+  labels, in any language, once both are folded (lower case, accents
+  removed, `œ` as `oe`, spaces collapsed). "1 Œuf  moyen" and "1 oeuf
+  moyen" are the same; "1 œuf moyen" at 45 g and at 50 g are two portions,
+  and so are the same words in `g` and in `ml`. The serving of a label is
+  not compared.
+- **Plausible.** From 1 to 2000 g or ml, both included
+  (`implausible_portion` outside). The label has 120 characters at most.
+- **Ten per food.** A food has at most 10 visible portions added by people
+  (`too_many_portions`); those of its source do not count.
+- **Order.** After the portions of the source, the added ones come oldest
+  first. Dates are days: two portions added the same day are ordered by
+  their identifier, which does not change, so a rebuild keeps the order.
+- **No vote, and no edit.** A portion is not voted for and cannot be
+  changed: a wrong one is reported with its food, and hidden by moderation.
 
 ### Search
 
@@ -396,10 +453,13 @@ Every error is `{"code": ..., "message": ...}`; some carry one more field.
 | 409 | `version_exists` | a version already has exactly these values | `version_id` |
 | 409 | `name_exists` | the source already gives a name in this language | |
 | 409 | `too_many_versions` | the food already has 20 versions proposed by users | |
+| 409 | `portion_exists` | the food already has this portion (same label, same amount within 1) | `portion_id` |
+| 409 | `too_many_portions` | the food already has 10 portions added by users | |
 | 413 | `payload_too_large` | a body above 64 KiB | |
 | 422 | `invalid_request` | a parameter or a field is missing, unknown, of the wrong type or too long | |
 | 422 | `invalid_barcode` | not a GTIN with a valid check digit | |
 | 422 | `implausible_values` | the values fail the quality checks of the build | `checks` |
+| 422 | `implausible_portion` | a portion added weighs or holds less than 1 or more than 2000 | |
 | 500 | `internal_error` | the service failed | |
 | 503 | `database_unavailable` | no `food.sqlite` is installed yet | |
 | 503 | `writes_disabled` | the service runs without a token | |
@@ -421,6 +481,9 @@ misspelt name would otherwise be lost silently.
   left out. Values are rounded to 4 decimals and must pass the quality
   checks listed in the README.
 - `servings`: at most 10, each `{"label"?, "amount" > 0, "unit": "g" | "ml"}`.
+- A portion added (`POST /v1/foods/{id}/portions`): `language` (a language
+  code), `label` (1 to 120 characters), `amount` (a number from 1 to 2000)
+  and `unit` (`g` or `ml`), all required.
 - `barcode`: digits, spaces and dashes; normalised (a UPC on 12 digits
   becomes a GTIN-13) and its check digit verified.
 - An identifier in an address: at most 80 visible ASCII characters; write
@@ -439,7 +502,7 @@ misspelt name would otherwise be lost silently.
                 "user_version_votes": 3},
     "built_at": "2026-10-11T12:58:40+00:00",
     "served_since": "2026-10-11T13:19:34+00:00",
-    "layout_version": 2,
+    "layout_version": 3,
     "licence": {"id": "ODbL-1.0", "name": "...", "url": "...", "notice": "...", "contents": "..."},
     "sources": [{"id": "off", "title": "Open Food Facts", "publisher": "...", "homepage": "...",
                  "version": "...", "released": "...", "licence": "ODbL-1.0", "licence_name": "...",
@@ -448,14 +511,16 @@ misspelt name would otherwise be lost silently.
                "products_without_barcode": 133326, "names": 4000064,
                "foods_with_several_versions": 352584, "by_source": {"off": 3367825},
                "added_since_the_build": {"products": 0, "versions": 0, "translations": 0,
-                                         "votes": 0}}
+                                         "votes": 0, "portions": 0}}
   }
   ```
 
   `licence.notice` and each `sources[].attribution` are the texts to
   reproduce (the same as in `ATTRIBUTION`). The counts other than `foods`
   and `by_source` come from the manifest and are `null` without it;
-  `added_since_the_build` counts the live database.
+  `added_since_the_build` counts the live database. `layout_version` is 3,
+  or 2 for a database built before the household portions, which is still
+  served: its foods then only list the portions people added.
 - `GET /v1/moderation/reports?state=open|closed|all&limit=50&offset=0`
   (`limit` at most 100) returns `{"items": [...], "next_offset": ...}`, each
   item `{"id", "food_id", "reason", "note", "state", "created_at",
@@ -475,10 +540,13 @@ misspelt name would otherwise be lost silently.
 - `POST /v1/foods/{id}/versions` also answers `"version_id"`, the identifier
   of the version it created, beside `"versions"`.
 - `POST /v1/moderation/foods/{id}/hide` and `/restore` answer `{"id": ...,
-  "hidden": true | false}`. `{id}` is the identifier of a food, or of one
-  version (`kratheos:v:<uuid>`, `usda:branded:...`): a hidden version is not
+  "hidden": true | false}`. `{id}` is the identifier of a food, of one
+  version (`kratheos:v:<uuid>`, `usda:branded:...`) or of one portion
+  (`kratheos:p:<uuid>`, `cnf:125:p:1`): a hidden version is not
   listed, cannot be served or voted for, and is left out of the export with
-  its votes, while the food stays. A food whose versions are all hidden is
+  its votes, while the food stays. A hidden portion is no longer listed in
+  `servings` nor exported, and no longer counts among the ten; a hidden food
+  takes its portions with it. A food whose versions are all hidden is
   not found. A hidden food keeps its barcode: creating a product with it
   answers `barcode_exists`.
 - `POST /v1/moderation/reports/{report_id}/close` answers `{"id": ...,
@@ -519,8 +587,9 @@ misspelt name would otherwise be lost silently.
 ### Moderation: one contributor key
 
 The public tables carry no author. The service keeps, in a history that is
-never exported, which keyed hash wrote each product, each version and each
-name; this is what lets a moderator undo the work of one key. The contract
+never exported, which keyed hash wrote each product, each version, each
+name and each portion; this is what lets a moderator undo the work of one
+key. The contract
 says the key only serves to count a person once: it now also serves this,
 and nothing else. A key is sent in the body of a request, never in its
 address (addresses are logged); what comes back is its keyed hash, never the
@@ -532,37 +601,42 @@ key.
   ```json
   {
     "contributor": "<keyed hash>", "blocked": false, "blocked_at": null,
-    "counts": {"products": 1, "versions": 1, "translations": 1, "votes": 3, "reports": 1},
+    "counts": {"products": 1, "versions": 1, "translations": 1, "portions": 1, "votes": 3,
+               "reports": 1},
     "products": [{"food_id": "gtin:...", "record_id": "kratheos:<uuid>", "name": "...",
                   "at": "2026-10-11T14:03:22Z", "hidden": false}],
     "versions": [{"version_id": "kratheos:v:<uuid>", "food_id": "...", "at": "...", "hidden": false}],
     "translations": [{"food_id": "...", "language": "de", "name": "...", "at": "...", "current": true}],
+    "portions": [{"portion_id": "kratheos:p:<uuid>", "food_id": "...", "language": "fr",
+                  "label": "1 œuf moyen", "amount": 50, "unit": "g", "at": "...", "hidden": false}],
     "votes": [{"food_id": "...", "version_id": "...", "at": "..."}],
     "reports": [{"id": 4, "food_id": "...", "reason": "other", "note": "", "state": "open", "at": "..."}]
   }
   ```
 
   Each list holds the 500 most recent rows, `counts` all of them. `hidden`
-  says whether a product or a version is hidden, one by one or with its key;
+  says whether a product, a version or a portion is hidden, one by one or
+  with its key;
   `current` whether a name is still the one of the food in that language
   (somebody else may have given another since). A key the service never saw
   has empty lists. What a layer written elsewhere brought has no author.
 - `POST /v1/moderation/contributors/block` with `{"contributor": "<key>"}`
   hides everything the key wrote and refuses its later writes, in one call.
-  Its products, its versions and the names it added that are still current
-  become invisible like any hidden record (not found, not listed, not
-  searched, left out of the export); its votes are no longer counted, so the
-  version served may change back; its reports are left out of the moderation
-  lists. Every later write carrying the key (`POST /v1/products`,
-  `.../versions`, `.../votes`, `.../translations`, `.../reports`) answers 403
-  `contributor_blocked`. It answers `{"blocked": true, "contributor":
-  "<keyed hash>", "blocked_at": "...", "withdrawn": {"products": 2,
-  "versions": 1, "translations": 1}}`. Blocking a key that already is
-  changes nothing and answers the same.
+  Its products, its versions, its portions and the names it added that are
+  still current become invisible like any hidden record (not found, not
+  listed, not searched, left out of the export); its votes are no longer
+  counted, so the version served may change back; its reports are left out
+  of the moderation lists. Every later write carrying the key
+  (`POST /v1/products`, `.../versions`, `.../votes`, `.../translations`,
+  `.../portions`, `.../reports`) answers 403 `contributor_blocked`. It
+  answers `{"blocked": true, "contributor": "<keyed hash>", "blocked_at":
+  "...", "withdrawn": {"products": 2, "versions": 1, "translations": 1,
+  "portions": 1}}`. Blocking a key that already is changes nothing and
+  answers the same.
 - `POST /v1/moderation/contributors/unblock` with `{"contributor": "<key>"}`
   undoes both and answers `{"blocked": false, "blocked_at": null,
   "contributor": "<keyed hash>", "restored": {"products": 2, "versions": 1,
-  "translations": 1}}`. What the key wrote is served again exactly as
+  "translations": 1, "portions": 1}}`. What the key wrote is served again exactly as
   before, its votes count again and its reports are listed again. What
   moderation hid one by one (`.../hide`) is a separate fact and stays
   hidden; a name somebody else gave to a food while the key was blocked
@@ -572,8 +646,9 @@ key.
   history: `{"id": ..., "contributors": [{"contributor": "<keyed hash>",
   "actions": ["create_product"], "first_at": "...", "last_at": "..."}]}`,
   in the order of their first write. `{id}` is a food (who created it, who
-  added a name: `create_product`, `translate`) or a version (who proposed it,
-  who voted for it: `add_version`, `vote`); the record of a product added in
+  added a name: `create_product`, `translate`), a version (who proposed it,
+  who voted for it: `add_version`, `vote`) or a portion (who added it:
+  `add_portion`); the record of a product added in
   Kratheos (`kratheos:<uuid>`) also names whoever created it when the food
   is named after its barcode. 404 `not_found` for an unknown record; an
   empty list for a record of a source nobody wrote to. Compare with the

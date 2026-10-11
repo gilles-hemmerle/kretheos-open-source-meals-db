@@ -10,8 +10,13 @@ A food is put together from two places, for every read:
   For a food the live database holds votes of, its counts are the truth and
   those folded into the main database are ignored: a vote is never counted
   twice. A version or a name present in both is kept once;
+* the household portions of a food ("1 large", 50 g) are those its source
+  publishes, read from the main database, then those people added, read
+  from the live database; one present in both is kept once. They belong to
+  the food, not to a version of its values;
 * what moderation hid is left out: a hidden food does not exist for a read,
-  a hidden version is not listed and cannot be served.
+  a hidden version is not listed and cannot be served, a hidden portion is
+  not offered.
 
 The version served is then chosen for the country of the request
 (`versions.choose_served`), and the food is written as the JSON record of
@@ -91,6 +96,10 @@ class Food:
         is_drink: Whether its source classifies it as a beverage.
         popularity: Popularity figure of its source, 0 when it has none.
         versions: Its visible versions, in the order of the build.
+        portions: Its visible household portions: those of its source, in
+            the order of the source, then those people added, oldest first.
+            Each has `portion_id`, `origin` (`source` or `kratheos`),
+            `labels` (by language code), `amount` and `unit`.
         hidden: Whether moderation hid the food (only seen by moderation).
     """
 
@@ -105,6 +114,7 @@ class Food:
     is_drink: bool
     popularity: int
     versions: list[dict] = field(default_factory=list)
+    portions: list[dict] = field(default_factory=list)
     hidden: bool = False
 
     def served(self, country: str | None, user_version_votes: int) -> dict:
@@ -224,7 +234,8 @@ def assemble(
 
     Returns:
         The foods found, by identifier. A hidden food, or one whose versions
-        are all hidden, is left out unless `include_hidden` is set.
+        are all hidden, is left out unless `include_hidden` is set. A hidden
+        portion is always left out.
     """
     base_rows = list(base_rows)
     base_ids = [row["id"] for row in base_rows]
@@ -240,6 +251,10 @@ def assemble(
     several = catalogue.versions_by_pk(
         context.base, [row["pk"] for row in base_rows if row["versions_count"] > 1]
     )
+    official = (
+        catalogue.portions_by_pk(context.base, pks) if context.generation.has_portions else {}
+    )
+    added_portions = live.portions_by_food(context.live, food_ids)
 
     foods: dict[str, Food] = {}
     for row in base_rows:
@@ -261,6 +276,7 @@ def assemble(
             is_drink=bool(row["is_drink"]),
             popularity=row["popularity"] or 0,
             versions=listed,
+            portions=list(official.get(row["pk"], ())),
         )
     for food_id in live_only:
         product = products.get(food_id)
@@ -296,10 +312,18 @@ def assemble(
         for lang, name in added_names.get(food_id, {}).items():
             if lang not in food.names or food.names[lang][1] == NAME_ORIGIN_KRATHEOS:
                 food.names[lang] = (name, NAME_ORIGIN_KRATHEOS)
+        # A portion a rebuild folded into the main database is in both: kept once.
+        folded = {portion["portion_id"] for portion in food.portions}
+        food.portions += [
+            portion
+            for portion in added_portions.get(food_id, ())
+            if portion["portion_id"] not in folded
+        ]
 
     record_ids = list(foods)
     for food in foods.values():
         record_ids += [version["version_id"] for version in food.versions]
+        record_ids += [portion["portion_id"] for portion in food.portions]
     hidden = live.hidden_among(context.live, record_ids)
     visible: dict[str, Food] = {}
     for food_id, food in foods.items():
@@ -307,6 +331,9 @@ def assemble(
         food.hidden = food_id in hidden or (
             food_id in live_only and live.RECORD_PREFIX + product["uuid"] in hidden
         )
+        food.portions = [
+            portion for portion in food.portions if portion["portion_id"] not in hidden
+        ]
         if not include_hidden:
             food.versions = [
                 version for version in food.versions if version["version_id"] not in hidden
@@ -427,20 +454,65 @@ def _source(generation: Generation, version: Mapping) -> dict:
 
 
 def _servings(version: Mapping) -> list[dict]:
-    """List the portions of a version.
+    """List the portion of a version: the one its record gives, if any.
 
     Args:
         version: The version.
 
     Returns:
-        At most one portion: the database keeps one per version. Empty when
-        the size of the portion is unknown.
+        At most one portion: the database keeps one per version (the serving
+        of a label). Empty when the size of the portion is unknown.
     """
     size = version["serving_size"]
     if size is None or size <= 0:
         return []
     unit = version["serving_unit"] or UNITS[version["basis"]]
     return [{"label": version["serving_text"] or f"{size:g} {unit}", "amount": size, "unit": unit}]
+
+
+def resolve_label(labels: Mapping[str, str], language: str | None) -> str:
+    """Choose the label of a portion to show to a person, like a name.
+
+    Args:
+        labels: The labels of the portion, by language code.
+        language: Language of the person, e.g. `fr` or `fr-CH`.
+
+    Returns:
+        The label in the language of the person, else the English one, else
+        the one of the first language the portion has, in alphabetical order.
+    """
+    candidates = []
+    if language:
+        code = language.strip().lower().replace("_", "-")
+        candidates += [code, code.split("-")[0]]
+    candidates.append(FALLBACK_LANGUAGE)
+    for candidate in candidates:
+        if labels.get(candidate):
+            return labels[candidate]
+    return next((labels[code] for code in sorted(labels) if labels[code]), "")
+
+
+def food_servings(food: Food, served: Mapping, language: str | None) -> list[dict]:
+    """List the portions a food offers to a request.
+
+    Args:
+        food: The food.
+        served: The version served to the request.
+        language: Language of the request, for the labels.
+
+    Returns:
+        The portion of the version served (the serving of a label), if it
+        has one, then the household portions of the food: those of its
+        source, then those people added.
+    """
+    return _servings(served) + [
+        {
+            "label": resolve_label(portion["labels"], language),
+            "amount": portion["amount"],
+            "unit": portion["unit"],
+        }
+        for portion in food.portions
+    ]
 
 
 def _nutrients(version: Mapping) -> dict:
@@ -532,7 +604,7 @@ def render_food(context: Context, food: Food, language: str | None, country: str
         "basis": served["basis"],
         "is_drink": food.is_drink,
         "nutrients": _nutrients(served),
-        "servings": _servings(served),
+        "servings": food_servings(food, served, language),
         "source": _source(context.generation, served),
         "version_id": served["version_id"],
         "version_origin": served["origin"],

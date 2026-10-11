@@ -9,7 +9,9 @@ system keeps alive as long as a connection holds it: no request is lost.
 
 A file that cannot be served (missing, damaged, of another layout) never
 replaces the one being served: the service goes on with what it has and says
-so in its log.
+so in its log. A file of the layout before the household portions (2) is
+still served, as it always was: its foods simply have no portion of a source
+until a rebuild brings them.
 
 A file that starts being served is read once in the background, so that the
 system holds it in memory before the first searches need it.
@@ -43,6 +45,10 @@ from .. import kratheos, sqlite_export
 from .settings import MANIFEST_NAME
 
 SUPPORTED_LAYOUT = sqlite_export.LAYOUT_VERSION
+# Layouts this service serves: the current one, and the one before it, which
+# only lacks the table of the portions.
+LAYOUT_WITHOUT_PORTIONS = 2
+SUPPORTED_LAYOUTS = (LAYOUT_WITHOUT_PORTIONS, SUPPORTED_LAYOUT)
 GTIN_FIRST = "gtin:"
 GTIN_AFTER = "gtin;"  # the first text sorting after every identifier starting with gtin:
 # Identifiers of the in-store barcodes, which shops give to what they weigh
@@ -116,6 +122,8 @@ class Generation:
         priorities: Fixed order of the sources, lowest first.
         meta: The key and value pairs of its `meta` table.
         foods: Number of foods.
+        has_portions: Whether the file holds the table of the household
+            portions (layout 3 on).
         built_at: When it was built: from the manifest next to it, else the
             modification time of the file.
         manifest: The manifest next to it, or None.
@@ -143,6 +151,7 @@ class Generation:
     priorities: dict[str, int] = field(default_factory=dict)
     meta: dict[str, str] = field(default_factory=dict)
     foods: int = 0
+    has_portions: bool = False
     built_at: str = ""
     manifest: dict | None = None
     first_gtin: int | None = None
@@ -237,10 +246,11 @@ def read_generation(path: Path, signature: tuple) -> Generation:
     try:
         generation.meta = dict(connection.execute("SELECT key, value FROM meta").fetchall())
         layout = generation.meta.get("layout_version")
-        if layout != str(SUPPORTED_LAYOUT):
+        if layout not in {str(supported) for supported in SUPPORTED_LAYOUTS}:
             raise DatabaseRejected(
                 f"{path}: layout {layout}, this service serves layout {SUPPORTED_LAYOUT}"
             )
+        generation.has_portions = layout != str(LAYOUT_WITHOUT_PORTIONS)
         for row in connection.execute("SELECT * FROM sources ORDER BY id"):
             generation.sources[row["id"]] = dict(row)
             generation.priorities[row["id"]] = row["priority"]
@@ -256,6 +266,8 @@ def read_generation(path: Path, signature: tuple) -> Generation:
         _locate_in_store_barcodes(connection, generation)
         connection.execute("SELECT rowid FROM foods_fts WHERE foods_fts MATCH 'a' LIMIT 1")
         connection.execute("SELECT food_pk FROM versions LIMIT 1").fetchall()
+        if generation.has_portions:
+            connection.execute("SELECT food_pk FROM portions LIMIT 1").fetchall()
     except sqlite3.Error as error:
         connection.close()
         raise DatabaseRejected(f"{path}: {error}") from error
@@ -591,6 +603,54 @@ def versions_by_pk(connection: sqlite3.Connection, pks: Iterable[int]) -> dict[i
     for row in _select_in(connection, sql, pks):
         found.setdefault(row["food_pk"], []).append(row)
     return found
+
+
+def portions_by_pk(connection: sqlite3.Connection, pks: Iterable[int]) -> dict[int, list]:
+    """Read the household portions of foods.
+
+    Args:
+        connection: A connection to a main database that has the table
+            (`Generation.has_portions`).
+        pks: Internal numbers of foods.
+
+    Returns:
+        For each food that has some, its portions in the order of the build:
+        `portion_id`, `origin`, `labels` (by language code), `amount`, `unit`.
+    """
+    found: dict[int, list[dict]] = {}
+    sql = (
+        "SELECT food_pk, portion_id, origin, labels, amount, unit FROM portions"
+        " WHERE food_pk IN ({marks}) ORDER BY food_pk, position"
+    )
+    for row in _select_in(connection, sql, pks):
+        found.setdefault(row["food_pk"], []).append(
+            {
+                "portion_id": row["portion_id"],
+                "origin": row["origin"],
+                "labels": json.loads(row["labels"]),
+                "amount": row["amount"],
+                "unit": row["unit"],
+            }
+        )
+    return found
+
+
+def food_of_portion(connection: sqlite3.Connection, portion_id: str) -> str | None:
+    """Return the food a portion of the main database belongs to.
+
+    Args:
+        connection: A connection to a main database that has the table.
+        portion_id: Identifier of a portion.
+
+    Returns:
+        The identifier of the food, or None when no portion has it.
+    """
+    row = connection.execute(
+        "SELECT f.id FROM portions AS p JOIN foods AS f ON f.pk = p.food_pk"
+        " WHERE p.portion_id = ? LIMIT 1",
+        (portion_id,),
+    ).fetchone()
+    return row[0] if row else None
 
 
 def food_of_version(connection: sqlite3.Connection, version_id: str) -> str | None:

@@ -9,6 +9,11 @@ quality judgements to `normalize.py`.
 Two helpers cover the two ways adapters work: `write_staging_query` for
 sources large enough to be transformed in SQL, and `write_staging_rows` for
 small tables parsed in Python.
+
+A source that publishes household portions for its foods ("1 large = 50 g")
+also writes them, with `write_portions_query`, to a second file next to the
+staging file, in the columns of `schema.PORTION_COLUMNS`. Nothing is guessed
+there either: a portion without a weight or without a wording is left out.
 """
 
 from __future__ import annotations
@@ -46,6 +51,17 @@ class AdapterContext:
     work_dir: Path
     staging_path: Path
     log: Logger = print
+
+    @property
+    def portions_path(self) -> Path:
+        """Return the Parquet file an adapter writes the portions of its records to.
+
+        Returns:
+            The file next to the staging file: `<source>.portions.parquet`.
+            Only the adapters of the sources that publish household portions
+            write it.
+        """
+        return self.staging_path.with_name(self.staging_path.stem + ".portions.parquet")
 
     def file(self, name: str) -> Path:
         """Return the path of a file of the source.
@@ -213,6 +229,50 @@ def write_staging_rows(context: AdapterContext, rows: list[dict]) -> int:
     )
     con.execute("DROP TABLE adapter_rows_raw")
     return written
+
+
+# A label that is only a weight ("100 g", "4 oz", "1 lb") says nothing about
+# the food: it is the same for every food, and a person types a weight
+# anyway. Such a measure is not a household portion and is left out. A
+# volume ("250 ml", "1 fl oz") stays: its weight is the one of this food.
+WEIGHT_ONLY_LABEL = r"^[0-9][0-9.,/ ]*(g|gram|grams|kg|oz|ounce|ounces|lb|lbs|pound|pounds)$"
+
+
+def whole_number_sql(expression: str) -> str:
+    """Build the SQL writing a number the way a person writes it.
+
+    Args:
+        expression: A DOUBLE SQL expression.
+
+    Returns:
+        A VARCHAR expression: `1` for 1.0, `0.5` for 0.5.
+    """
+    return (
+        f"CASE WHEN {expression} = floor({expression})"
+        f" THEN CAST(CAST({expression} AS BIGINT) AS VARCHAR)"
+        f" ELSE CAST({expression} AS VARCHAR) END"
+    )
+
+
+def write_portions_query(context: AdapterContext, select_sql: str) -> int:
+    """Write the staging file of the portions from a SQL query.
+
+    Args:
+        context: The adapter context.
+        select_sql: A SELECT exposing every column of `schema.PORTION_COLUMNS`
+            by name, one row per portion kept.
+
+    Returns:
+        The number of portions written.
+    """
+    context.portions_path.parent.mkdir(parents=True, exist_ok=True)
+    cast = schema.portion_cast_select(f"({select_sql}) AS adapter_portions")
+    context.con.execute(
+        f"COPY ({cast}) TO {sql_string(context.portions_path)} (FORMAT PARQUET, COMPRESSION ZSTD)"
+    )
+    return context.con.execute(
+        f"SELECT count(*) FROM read_parquet({sql_string(context.portions_path)})"
+    ).fetchone()[0]
 
 
 def clean_text(value: object) -> str | None:

@@ -8,7 +8,9 @@ nothing:
    stored copy when upstream fails or when the build is told to use the
    mirror (`mirror.py`);
 2. the adapter of each source reads its files and writes a staging file in
-   `work/staging/`; `normalize.py` turns it into records of the output schema;
+   `work/staging/` (and, for a source that publishes household portions, a
+   second one holding them); `normalize.py` turns the first into records of
+   the output schema;
 3. `aggregate.py` aggregates the sources and writes the Parquet, CSV and JSON
    Lines files, which hold the sources as they are;
 4. the Kratheos layer (`kratheos.sqlite`) is applied on top and the main
@@ -258,6 +260,7 @@ def run_build(workspace: Workspace, options: BuildOptions, log: Logger = print) 
 
     con = connect(workspace.work)
     normalized: dict[str, Path] = {}
+    portions: dict[str, Path] = {}
     built: dict[str, dict] = {}
     for source in sources:
         stage_started = time.monotonic()
@@ -271,7 +274,11 @@ def run_build(workspace: Workspace, options: BuildOptions, log: Logger = print) 
             staging_path=staging,
             log=log,
         )
+        # A file left by an earlier build is never taken for the one of this build.
+        context.portions_path.unlink(missing_ok=True)
         result = get_adapter(source.adapter)(source, context)
+        if context.portions_path.exists():
+            portions[source.id] = context.portions_path
         normalized[source.id] = workspace.work / "normalized" / f"{source.id}.parquet"
         counts = normalize_source(con, source, staging, normalized[source.id])
         log(f"  {counts['kept']:,} records kept, dropped: {counts['dropped'] or 'none'}")
@@ -287,6 +294,7 @@ def run_build(workspace: Workspace, options: BuildOptions, log: Logger = print) 
     require_free_space(workspace.dist, options.min_free_gb)
     log("Aggregating the sources")
     aggregate.create_source_views(con, sources, normalized)
+    aggregate.create_portion_view(con, portions)
     outputs = aggregate.write_source_outputs(con, workspace.dist, all_formats=options.all_formats)
     statistics = aggregate.overall_statistics(con)
     entries = [

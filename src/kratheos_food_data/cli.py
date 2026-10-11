@@ -31,6 +31,7 @@ Run `food-data <command> --help` for the options of a command.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -166,6 +167,17 @@ def _parser() -> argparse.ArgumentParser:
         "--all-formats",
         action="store_true",
         help="also write the product tables as CSV and JSON Lines (large)",
+    )
+    build.add_argument(
+        "--dist",
+        type=Path,
+        help="directory the database is written to (default: dist/ of the repository);"
+        " another one leaves a database being served from dist/ alone",
+    )
+    build.add_argument(
+        "--work",
+        type=Path,
+        help="scratch directory of the build (default: work/ of the repository)",
     )
 
     download = commands.add_parser("download", help="obtain, verify or restore the source files")
@@ -349,7 +361,8 @@ def _run_service_command(args: argparse.Namespace, workspace: Workspace, root: P
         print(
             f"{out}: {state}; {summary['products']} products, {summary['versions']} versions,"
             f" {summary['votes']} votes on {summary['voted_versions']} versions,"
-            f" {summary['translations']} names; sha256 {summary['sha256']}"
+            f" {summary['translations']} names, {summary['portions']} portions;"
+            f" sha256 {summary['sha256']}"
         )
         if args.commit or args.push:
             export.commit_layer(out, summary, push=args.push, log=_log)
@@ -363,7 +376,8 @@ def _run_service_command(args: argparse.Namespace, workspace: Workspace, root: P
             store.close()
         print(
             f"{settings.live}: took over {added['products']} products, {added['versions']}"
-            f" versions, {added['translations']} names and {added['votes']} votes"
+            f" versions, {added['translations']} names, {added['portions']} portions and"
+            f" {added['votes']} votes"
         )
     elif args.command == "rebuild":
         settings = _settings(args, root, with_secret=False)
@@ -454,7 +468,12 @@ def main(argv: list[str] | None = None) -> int:
     workspace = Workspace.at(root)
     try:
         if args.command == "build":
-            run_build(workspace, _options(args), log=_log)
+            where = dataclasses.replace(
+                workspace,
+                dist=args.dist.resolve() if args.dist else workspace.dist,
+                work=args.work.resolve() if args.work else workspace.work,
+            )
+            run_build(where, _options(args), log=_log)
         elif args.command == "download":
             run_download(workspace, _options(args), log=_log)
         elif args.command == "sources":

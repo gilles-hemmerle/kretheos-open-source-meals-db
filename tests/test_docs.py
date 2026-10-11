@@ -15,7 +15,7 @@ from conftest import REPOSITORY
 
 from kratheos_food_data import cli, kratheos, schema, sqlite_export, versions
 from kratheos_food_data.config import Source
-from kratheos_food_data.service import api, foods, settings
+from kratheos_food_data.service import api, foods, settings, validation
 
 README = (REPOSITORY / "README.md").read_text(encoding="utf-8")
 API = (REPOSITORY / "docs" / "api.md").read_text(encoding="utf-8")
@@ -54,6 +54,7 @@ def test_committed_kratheos_layer_is_empty_and_has_the_documented_layout() -> No
     assert layer.meta == {"schema_version": str(kratheos.SCHEMA_VERSION), "exported_at": ""}
     assert layer.rows == 0
     assert not (layer.products or layer.versions or layer.votes or layer.translations)
+    assert not layer.portions
     forbidden = ("user", "account", "handle", "email", "author", "device", "person", "contributor")
     for table, columns in kratheos.TABLES.items():
         for name, _ in columns:
@@ -108,6 +109,7 @@ def test_api_reference_holds_the_contract_and_follows_the_code() -> None:
         "POST /v1/foods/{id}/versions",
         "POST /v1/foods/{id}/votes",
         "POST /v1/foods/{id}/translations",
+        "POST /v1/foods/{id}/portions",
         "POST /v1/foods/{id}/reports",
         "GET /v1/moderation/reports?state=open",
         "POST /v1/moderation/foods/{id}/hide",
@@ -132,6 +134,14 @@ def test_api_reference_holds_the_contract_and_follows_the_code() -> None:
     for flag in (*schema.INFO_FLAGS, *schema.QUALITY_FLAGS):
         assert f"`{flag}`" in API, flag
     assert f"at most {api.MAX_USER_VERSIONS} versions proposed by users" in API
+    # The portions: several per food record, and the limits of those people add.
+    assert "`servings` holds at most one portion" not in API
+    assert "`servings` lists the portions the food offers" in API
+    assert f"beyond {api.MAX_USER_PORTIONS} added portions per food" in API
+    assert f"From {validation.MIN_PORTION_AMOUNT} to {validation.MAX_PORTION_AMOUNT} g or ml" in API
+    assert f'"layout_version": {sqlite_export.LAYOUT_VERSION},' in API
+    for column in schema.PORTION_COLUMNS:
+        assert f"`{column.name}`" in README, column.name
 
 
 def test_readme_documents_the_service_its_settings_and_its_commands() -> None:
