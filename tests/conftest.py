@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import threading
 import tomllib
 from collections.abc import Iterator
@@ -22,8 +23,9 @@ import duckdb
 import pytest
 from builders import build_all
 
-from kratheos_food_data import barcode, download
+from kratheos_food_data import barcode, download, kratheos
 from kratheos_food_data.adapters import AdapterContext
+from kratheos_food_data.build import Workspace
 from kratheos_food_data.config import Source, load_sources
 
 REPOSITORY = Path(__file__).resolve().parent.parent
@@ -189,13 +191,17 @@ def declared_sources() -> dict[str, Source]:
 
 @pytest.fixture
 def adapter_context(
-    con: duckdb.DuckDBPyConnection, miniature_sources: Path, tmp_path: Path
+    con: duckdb.DuckDBPyConnection,
+    miniature_sources: Path,
+    declared_sources: dict[str, Source],
+    tmp_path: Path,
 ) -> callable:
     """Give a factory of adapter contexts over the miniature sources.
 
     Args:
         con: DuckDB connection.
         miniature_sources: Directory of the miniature source files.
+        declared_sources: The real source list, which names the files.
         tmp_path: Temporary directory of the test.
 
     Returns:
@@ -206,7 +212,10 @@ def adapter_context(
         """Build the context of one source."""
         return AdapterContext(
             con=con,
-            download_dir=miniature_sources / source_id,
+            files={
+                entry.name: miniature_sources / source_id / entry.name
+                for entry in declared_sources[source_id].files
+            },
             work_dir=tmp_path / "work" / source_id,
             staging_path=tmp_path / "staging" / f"{source_id}.parquet",
             log=lambda message: None,
@@ -229,6 +238,37 @@ def staged_rows(con: duckdb.DuckDBPyConnection, staging_path: Path) -> dict[str,
     names = [description[0] for description in cursor.description]
     rows = [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
     return {row["source_record_id"]: row for row in rows}
+
+
+def make_repository(root: Path, miniature_sources: Path, server: FileServer) -> Workspace:
+    """Lay out a miniature repository whose publishers are the test server.
+
+    The miniature source files are copied to the directory the server serves,
+    a source list pointing at them is written, and an empty Kratheos layer is
+    created, as in a fresh checkout before the first build.
+
+    Args:
+        root: Directory of the miniature repository.
+        miniature_sources: Directory of the miniature source files.
+        server: The test web server.
+
+    Returns:
+        The workspace of the repository.
+    """
+    shutil.copytree(miniature_sources, server.root, dirs_exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
+    write_test_source_list(root / "sources.toml", server.url)
+    workspace = Workspace.at(root)
+    kratheos.create_database(workspace.kratheos)
+    return workspace
+
+
+def quiet(message: str) -> None:
+    """Discard a progress line.
+
+    Args:
+        message: The line.
+    """
 
 
 def write_test_source_list(path: Path, base_url: str) -> None:

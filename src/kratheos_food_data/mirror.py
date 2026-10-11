@@ -239,16 +239,18 @@ def fetch_index(mirror_url: str, mirror_dir: Path, log: Logger) -> dict:
     return load_index(mirror_dir)
 
 
-def part_checksums(path: Path, part_bytes: int = MAX_ASSET_BYTES) -> list[dict]:
+def part_checksums(path: Path, part_bytes: int | None = None) -> list[dict]:
     """Compute the size and checksum of each part of a file, without writing them.
 
     Args:
         path: The whole file.
-        part_bytes: Largest size of a part.
+        part_bytes: Largest size of a part; by default the largest a release
+            accepts.
 
     Returns:
         One entry per part, in order: name, size and SHA-256.
     """
+    part_bytes = part_bytes or MAX_ASSET_BYTES
     sizes_and_hashes = []
     with path.open("rb") as handle:
         while True:
@@ -270,7 +272,7 @@ def part_checksums(path: Path, part_bytes: int = MAX_ASSET_BYTES) -> list[dict]:
     ]
 
 
-def split_file(path: Path, out_dir: Path, part_bytes: int = MAX_ASSET_BYTES) -> list[dict]:
+def split_file(path: Path, out_dir: Path, part_bytes: int | None = None) -> list[dict]:
     """Write a file as numbered parts, each small enough for a release.
 
     The original is only read. A part already present with the right size is
@@ -279,7 +281,8 @@ def split_file(path: Path, out_dir: Path, part_bytes: int = MAX_ASSET_BYTES) -> 
     Args:
         path: The whole file.
         out_dir: Directory receiving the parts.
-        part_bytes: Largest size of a part.
+        part_bytes: Largest size of a part; by default the largest a release
+            accepts.
 
     Returns:
         One entry per part, in order: name, size and SHA-256.

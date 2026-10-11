@@ -26,6 +26,8 @@ terms_url = "https://example.org/terms"
 terms_quote = "You may redistribute."
 terms_checked = "2026-10-11"
 attribution = "Demo data"
+mirror = "git"
+country = "fr"
 enabled = true
 
   [[source.files]]
@@ -83,6 +85,28 @@ def test_valid_list_loads(tmp_path: Path) -> None:
     assert source.file("a.xml").url == "https://example.org/a.xml"
     with pytest.raises(KeyError):
         source.file("missing")
+
+
+def test_storage_and_country_are_validated(tmp_path: Path) -> None:
+    """A source says where its files are stored; its country is an ISO code."""
+    (source,) = _load(tmp_path, VALID)
+    assert source.mirror == "git"
+    assert source.country == "FR"
+    with pytest.raises(ConfigError, match="mirror"):
+        _load(tmp_path, VALID.replace('mirror = "git"', 'mirror = "somewhere"'))
+    with pytest.raises(ConfigError, match="country"):
+        _load(tmp_path, VALID.replace('country = "fr"', 'country = "France"'))
+
+
+def test_generic_tables_declare_their_country(declared_sources: dict[str, Source]) -> None:
+    """Every enabled table of generic foods names the country it describes."""
+    countries = {
+        source.id: source.country
+        for source in declared_sources.values()
+        if source.enabled and "generic" in source.kinds
+    }
+    assert countries == {"usda": "US", "ciqual": "FR", "swiss": "CH", "cnf": "CA", "cofid": "GB"}
+    assert declared_sources["off"].country == ""
 
 
 def test_enabled_source_needs_its_licence(tmp_path: Path) -> None:
