@@ -5,18 +5,42 @@ that knows it, the product added in Kratheos under its barcode, and those
 proposed by users. Nothing is averaged or overwritten; people vote for the
 version they find right.
 
-Which version is served:
+Which version is served. A version is "usable" when its values are plausible
+and it has the four macros (energy, protein, carbohydrate, fat).
 
-1. a version coming from a user (source `kratheos`) can only be served
-   instead of a record of a source once it has a minimum number of votes
-   (`DEFAULT_USER_VERSION_VOTES`, a setting). A food no source knows has only
-   such versions: they all count;
-2. when a country is asked for and at least one of the versions left lists
-   it, only those are considered;
-3. the version with the most votes wins;
-4. a tie, or no vote at all, falls back to the order of the build: plausible
-   values, complete macros, most recent, fixed source order, then the
-   identifier.
+1. Threshold. A version coming from a user (source `kratheos`: a product
+   added, a version proposed) with fewer votes than the threshold
+   (`DEFAULT_USER_VERSION_VOTES`, a setting) is left out when the food has at
+   least one usable version of a source. When no version of a source is
+   usable (there is none, or all are implausible or incomplete), every
+   version of a user counts: one person's plausible entry replaces values
+   the build itself flags.
+2. Country. When a country is asked for, the candidates that list other
+   countries are dropped, and those that list the country or no country at
+   all stay (unknown is not elsewhere), provided at least one candidate
+   listing the country is usable, or no candidate at all is usable.
+   Otherwise nothing is dropped: a country never trades usable values for
+   values that are not. Nothing is dropped either when that would leave no
+   candidate.
+3. Order among the candidates, the first wins:
+   a. the most votes;
+   b. plausible values;
+   c. complete macros;
+   d. it lists the country asked for (only when a country is asked for);
+   e. a version of a source before a version of a user;
+   f. among versions of sources the most recent, then the fixed source
+      order, then the identifier; among versions of users the oldest, then
+      the identifier.
+
+So a version of a user needs strictly more votes than a version of a source
+to pass it, and a later proposal strictly more votes than an earlier one.
+Without votes and without a country this is the order of the build, as it
+always was: plausible values, complete macros, most recent, fixed source
+order, identifier.
+
+"The order of the build" below is steps b, c, e and f: what orders the
+versions of a food when neither votes nor a country are looked at. It is the
+`position` of a version in `food.sqlite`.
 
 The build applies the rule in SQL without a country, to fill `foods`
 (`aggregate.build_foods`); a service applies this module per request, with
@@ -56,6 +80,18 @@ def origin_of(source: str) -> str:
     return ORIGIN_USER if source == USER_SOURCE else ORIGIN_SOURCE
 
 
+def usable(version: Mapping) -> bool:
+    """Tell whether the values of a version can be relied on.
+
+    Args:
+        version: A version with `plausible` and `has_macros`.
+
+    Returns:
+        True when the values are plausible and the four macros are there.
+    """
+    return bool(version.get("plausible")) and bool(version.get("has_macros"))
+
+
 def build_order(version: Mapping, priorities: Mapping[str, int]) -> tuple:
     """Return the sort key placing a version in the order of the build.
 
@@ -66,19 +102,19 @@ def build_order(version: Mapping, priorities: Mapping[str, int]) -> tuple:
 
     Returns:
         A key sorting plausible values first, then complete macros, then the
-        most recent, then the fixed source order, then the identifier.
+        versions of sources before those of users; among sources the most
+        recent, the fixed source order and the identifier; among users the
+        oldest and the identifier.
     """
     updated = str(version.get("updated_at") or "")[:10]
-    # Dates sort as text; negating each character code sorts them descending
-    # with the missing dates last, as `DESC NULLS LAST` does.
+    quality = (0 if version.get("plausible") else 1, 0 if version.get("has_macros") else 1)
+    if origin_of(version["source"]) == ORIGIN_USER:
+        # Dates sort as text; a missing date sorts after every date.
+        return (*quality, 1, updated or "~", 0, version["version_id"])
+    # Negating each character code sorts the dates descending with the missing
+    # ones last, as `DESC NULLS LAST` does.
     recent = tuple(-ord(char) for char in updated) if updated else (1,)
-    return (
-        0 if version.get("plausible") else 1,
-        0 if version.get("has_macros") else 1,
-        recent,
-        priorities.get(version["source"], 10**6),
-        version["version_id"],
-    )
+    return (*quality, 0, recent, priorities.get(version["source"], 10**6), version["version_id"])
 
 
 def ordered(versions: Iterable[Mapping], priorities: Mapping[str, int]) -> list:
@@ -103,10 +139,11 @@ def choose_served(
 
     Args:
         versions: The visible versions, already in the order of the build
-            (see `ordered`), each with `origin`, `votes` and `countries`.
+            (see `ordered`), each with `origin`, `votes`, `countries`,
+            `plausible` and `has_macros`.
         country: Country of the person, ISO 3166-1 alpha-2, if known.
         user_version_votes: Votes a version coming from a user needs to be
-            served instead of a record of a source.
+            served when a version of a source is usable.
 
     Returns:
         The version served, or None when there is no version.
@@ -114,21 +151,42 @@ def choose_served(
     if not versions:
         return None
     candidates = list(enumerate(versions))
-    if any(version["origin"] == ORIGIN_SOURCE for version in versions):
+    if any(version["origin"] == ORIGIN_SOURCE and usable(version) for version in versions):
         candidates = [
             (position, version)
             for position, version in candidates
             if version["origin"] == ORIGIN_SOURCE or version["votes"] >= user_version_votes
         ]
-    if country:
-        wanted = country.upper()
-        listing = [
-            (position, version)
-            for position, version in candidates
-            if wanted in (version.get("countries") or ())
-        ]
-        candidates = listing or candidates
-    return min(candidates, key=lambda item: (-item[1]["votes"], item[0]))[1]
+    wanted = country.upper() if country else None
+
+    def lists_the_country(version: Mapping) -> bool:
+        """Tell whether a version lists the country asked for."""
+        return wanted in (version.get("countries") or ())
+
+    if wanted:
+        usable_there = any(
+            usable(version) for _, version in candidates if lists_the_country(version)
+        )
+        if usable_there or not any(usable(version) for _, version in candidates):
+            kept = [
+                (position, version)
+                for position, version in candidates
+                if lists_the_country(version) or not version.get("countries")
+            ]
+            candidates = kept or candidates
+
+    def rank(item: tuple[int, Mapping]) -> tuple:
+        """Order the candidates: votes, quality, country, then the order of the build."""
+        position, version = item
+        return (
+            -version["votes"],
+            0 if version.get("plausible") else 1,
+            0 if version.get("has_macros") else 1,
+            0 if wanted is None or lists_the_country(version) else 1,
+            position,
+        )
+
+    return min(candidates, key=rank)[1]
 
 
 def listing_order(versions: Sequence[Mapping], served: Mapping | None) -> list:

@@ -509,15 +509,16 @@ def test_versions_votes_and_translations_rules(repository: Workspace) -> None:
 
     # Two sources and a user's version: nothing is overwritten, the most voted is served.
     listed = versions_of(repository, "gtin:3017620422003")
+    # In the order of the build: the sources, the most recent first, then the users.
     assert [(v["version_id"], v["origin"], v["votes"], v["served"]) for v in listed] == [
-        ("kratheos:v:aaa", "user", 4, 1),
         ("off:3017620422003", "source", 2, 0),
         ("usda:branded:3017620422003", "source", 1, 0),
+        ("kratheos:v:aaa", "user", 4, 1),
     ]
     assert [(v["energy_kcal"], v["countries"]) for v in listed] == [
-        (530.0, ["FR"]),
         (539.0, ["FR", "GB"]),
         (541.0, ["US"]),
+        (530.0, ["FR"]),
     ]
     nutella = query(
         repository,
@@ -552,7 +553,7 @@ def test_versions_votes_and_translations_rules(repository: Workspace) -> None:
     assert apricot == [("ciqual:13000", "ciqual", 45.9, 0, 2)]
     assert [
         (v["version_id"], v["votes"], v["served"]) for v in versions_of(repository, "ciqual:13000")
-    ] == [("kratheos:v:bbb", 2, 0), ("ciqual:13000", 0, 1)]
+    ] == [("ciqual:13000", 0, 1), ("kratheos:v:bbb", 2, 0)]
 
     # A version that makes no sense is served when people vote for it, and flagged.
     hamburger = query(
@@ -596,7 +597,7 @@ def test_versions_votes_and_translations_rules(repository: Workspace) -> None:
     assert [
         (v["version_id"], v["origin"], v["served"])
         for v in versions_of(repository, "gtin:5449000000996")
-    ] == [("kratheos:cola-ch", "user", 0), ("off:5449000000996", "source", 1)]
+    ] == [("off:5449000000996", "source", 1), ("kratheos:cola-ch", "user", 0)]
     assert query(repository, "SELECT count(*) FROM foods") == [(EXPECTED_FOODS,)]
     assert query(repository, "SELECT value FROM meta WHERE key = 'user_version_votes'") == [("3",)]
 
@@ -605,20 +606,38 @@ def test_served_version_is_the_same_in_the_build_and_in_python(repository: Works
     """The SQL of the build and `versions.choose_served` agree, whatever the threshold."""
     fill_layer_with_versions_and_votes(repository)
     layer = sqlite3.connect(repository.kratheos)
-    # A tie between a source and a user's version, and a product nobody else knows.
+    # Equal votes between a source and a user's version.
     layer.execute("UPDATE votes SET votes = 4 WHERE version_id = 'off:3017620422003'")
+    # A product nobody else knows and a later proposal for it, with equal votes.
     layer.execute(
         "INSERT INTO products (id, name, name_lang, basis, energy_kcal, protein_g,"
         " carbohydrate_g, fat_g, countries, updated_at) VALUES ('plat', 'Plat du test', 'fr',"
         " '100g', 150, 8, 12, 7, '[\"CH\"]', '2026-10-11')"
     )
-    layer.execute(
+    layer.executemany(
         VERSION_INSERT,
-        ("kratheos:v:eee", "kratheos:plat", 160, 8, 13, 2, 8, 2, 0.5)
-        + (None, None, None, '["CH"]', "2026-10-20"),
+        [
+            ("kratheos:v:eee", "kratheos:plat", 160, 8, 13, 2, 8, 2, 0.5)
+            + (None, None, None, '["CH"]', "2026-10-20"),
+            # The only source of this barcode gives values that make no sense (50 kcal
+            # for 20 g of fat): one person's plausible entry, without a vote, replaces it.
+            ("kratheos:v:fff", "gtin:7610000123451", 460, 10, 60, 30, 20, 4, 0.2)
+            + (None, None, None, None, "2026-10-15"),
+            # The same on a generic food, where the entry of the user makes no sense
+            # either: nothing is usable, and the source stays in front.
+            ("kratheos:v:ggg", "cofid:17-063", 40, 0, 105, 105, 0, 0, 0)
+            + (None, None, None, None, "2026-10-16"),
+        ],
+    )
+    layer.executescript(
+        """
+        INSERT INTO votes VALUES ('kratheos:plat', 'kratheos:plat', 2, '2026-10-21');
+        INSERT INTO votes VALUES ('kratheos:v:eee', 'kratheos:plat', 2, '2026-10-21');
+        """
     )
     layer.commit()
     layer.close()
+    served: dict[int, dict[str, str]] = {}
     for threshold in (1, 3, 5):
         from_nothing(repository)
         build(repository, user_version_votes=threshold)
@@ -630,7 +649,8 @@ def test_served_version_is_the_same_in_the_build_and_in_python(repository: Works
         ]
         database.close()
         assert priorities["usda"] == 1 and priorities["kratheos"] == 1000
-        assert len(several) == 6
+        assert len(several) == 8
+        served[threshold] = {}
         for food_id in several:
             listed = versions_of(repository, food_id)
             for version in listed:
@@ -641,38 +661,178 @@ def test_served_version_is_the_same_in_the_build_and_in_python(repository: Works
             assert [v["version_id"] for v in listed if v["served"]] == [chosen["version_id"]]
             record = query(repository, "SELECT record_id FROM foods WHERE id = ?", (food_id,))
             assert record == [(chosen["version_id"],)], (food_id, threshold)
-    # With 5 votes required the user's version (4 votes) gives way to the source it ties with.
-    assert query(repository, "SELECT record_id FROM foods WHERE id = 'gtin:3017620422003'") == [
-        ("off:3017620422003",)
+            served[threshold][food_id] = chosen["version_id"]
+    expected = {
+        # Equal votes (4 and 4): the source stays; a user's version needs strictly more.
+        "gtin:3017620422003": "off:3017620422003",
+        "gtin:0049000028911": "usda:branded:0049000028911",
+        # A product added under a barcode a source knows, without votes.
+        "gtin:5449000000996": "off:5449000000996",
+        # No usable source: the plausible entry of one person is served without a vote...
+        "gtin:7610000123451": "kratheos:v:fff",
+        # ...and an entry that makes no sense either stays behind the source.
+        "cofid:17-063": "cofid:17-063",
+        # 9 votes for values that make no sense: the votes decide first.
+        "ciqual:25999": "kratheos:v:ddd",
+        # Two users' versions with equal votes: the oldest, whatever came later.
+        "kratheos:plat": "kratheos:plat",
+    }
+    # With one vote required the proposal of 2 votes passes the source of none.
+    assert served[1] == {**expected, "ciqual:13000": "kratheos:v:bbb"}
+    assert served[3] == served[5] == {**expected, "ciqual:13000": "ciqual:13000"}
+    fixed = versions_of(repository, "gtin:7610000123451")
+    assert [(v["version_id"], v["plausible"], v["votes"]) for v in fixed] == [
+        ("kratheos:v:fff", 1, 0),  # plausible values come first in the order of the build
+        ("off:7610000123451", 0, 0),
     ]
-    # A food no source knows only has users' versions: the threshold does not apply, and
-    # without votes the most recent one is served.
-    assert query(repository, "SELECT record_id FROM foods WHERE id = 'kratheos:plat'") == [
-        ("kratheos:v:eee",)
+    assert query(
+        repository, "SELECT source, energy_kcal, name FROM foods WHERE id = 'gtin:7610000123451'"
+    ) == [("kratheos", 460.0, "Bircher Müesli")]
+    # A version that lists no country can be the one of a country another version lists:
+    # with one vote required, the proposal of 2 votes is served to France too.
+    apricot = versions_of(repository, "ciqual:13000")
+    for version in apricot:
+        version["plausible"], version["has_macros"] = True, True
+    assert [(v["version_id"], v["countries"]) for v in apricot] == [
+        ("ciqual:13000", ["FR"]),
+        ("kratheos:v:bbb", []),
     ]
+    assert versions.choose_served(apricot, "FR", 1)["version_id"] == "kratheos:v:bbb"
+    assert versions.choose_served(apricot, "FR", 3)["version_id"] == "ciqual:13000"
 
 
-def test_country_narrows_the_versions_considered() -> None:
-    """A person gets the version of their market when there is one."""
-    french = {"version_id": "off:1", "origin": "source", "votes": 0, "countries": ["FR", "GB"]}
-    american = {"version_id": "usda:1", "origin": "source", "votes": 2, "countries": ["US"]}
-    proposed = {"version_id": "kratheos:v:1", "origin": "user", "votes": 2, "countries": ["CH"]}
+def a_version(
+    version_id: str,
+    countries: tuple[str, ...] = (),
+    votes: int = 0,
+    plausible: bool = True,
+    has_macros: bool = True,
+    updated_at: str = "2026-01-01",
+) -> dict:
+    """Describe a version the way `versions.choose_served` reads it."""
+    source = version_id.split(":")[0]
+    return {
+        "version_id": version_id,
+        "source": source,
+        "origin": versions.origin_of(source),
+        "votes": votes,
+        "countries": list(countries),
+        "plausible": plausible,
+        "has_macros": has_macros,
+        "updated_at": updated_at,
+    }
+
+
+PRIORITIES = {"usda": 1, "off": 2, "kratheos": 1000}
+
+
+def test_threshold_only_protects_usable_sources() -> None:
+    """A user's version waits for its votes while a source has plausible, complete values."""
+    french = a_version("off:1", ("FR", "GB"))
+    american = a_version("usda:1", ("US",), votes=2)
+    proposed = a_version("kratheos:v:1", ("CH",), votes=2)
     listed = [french, american, proposed]
-    assert versions.choose_served(listed) is american  # the most voted
-    assert versions.choose_served(listed, "fr") is french  # the only one of that market
-    assert versions.choose_served(listed, "US") is american
-    assert versions.choose_served(listed, "DE") is american  # nobody lists it: all of them
-    # Below the threshold a user's version is never served instead of a source,
-    # even to the only country that lists it.
-    assert versions.choose_served(listed, "CH") is american
-    assert versions.choose_served(listed, "CH", user_version_votes=2) is proposed
+    assert versions.choose_served(listed) is american  # the most voted of those that count
+    assert versions.choose_served(listed, user_version_votes=2) is american  # 2 and 2: the source
     proposed["votes"] = 3
     assert versions.choose_served(listed) is proposed
-    assert versions.choose_served(listed, "US") is american
     american["votes"] = 3
-    assert versions.choose_served(listed) is american  # a tie: the order of the build
+    assert versions.choose_served(listed) is american  # strictly more votes are needed
     assert versions.listing_order(listed, french) == [french, american, proposed]
     assert versions.choose_served([]) is None
+
+    # No usable source (implausible, or without the four macros): every user's version counts.
+    for flaw in ({"plausible": False}, {"has_macros": False}):
+        broken = a_version("off:2", ("FR",), **flaw)
+        entry = a_version("kratheos:v:2", ("FR",))
+        assert versions.usable(entry) and not versions.usable(broken)
+        assert versions.choose_served([broken, entry]) is entry  # without a single vote
+        broken["votes"] = 1
+        assert versions.choose_served([broken, entry]) is broken  # votes still come first
+    # One usable source among several is enough for the threshold to apply.
+    assert (
+        versions.choose_served(
+            [a_version("off:3", plausible=False), french, a_version("kratheos:v:3", votes=1)]
+        )
+        is french
+    )
+
+
+def test_country_never_trades_usable_values_for_unusable_ones() -> None:
+    """A person gets the version of their market, unless only another one can be relied on."""
+    french = a_version("off:1", ("FR", "GB"))
+    american = a_version("usda:1", ("US",), votes=2)
+    proposed = a_version("kratheos:v:1", ("CH",), votes=2)
+    listed = [french, american, proposed]
+    assert versions.choose_served(listed, "fr") is french  # the one of that market
+    assert versions.choose_served(listed, "US") is american
+    assert versions.choose_served(listed, "DE") is american  # nobody lists it: all of them
+    # Below the threshold a user's version is not served, even to the only country listing it.
+    assert versions.choose_served(listed, "CH") is american
+    assert versions.choose_served(listed, "CH", user_version_votes=2) is proposed
+
+    # The record of the country is implausible or incomplete and another one is usable:
+    # the country does not filter.
+    for flaw in ({"plausible": False}, {"has_macros": False}):
+        local = a_version("off:2", ("FR",), **flaw)
+        foreign = a_version("usda:2", ("US",))
+        assert versions.choose_served([foreign, local], "FR") is foreign
+        # Nothing is usable anywhere: the record of the country is as good as any, and wins.
+        foreign["plausible"] = False
+        assert versions.choose_served([foreign, local], "FR") is local
+
+    # A version that lists no country is not "elsewhere": it stays, behind the one that
+    # lists the country when nothing else tells them apart, in front with more votes.
+    local = a_version("usda:3", ("US",), updated_at="2020-01-01")
+    unknown = a_version("off:3", (), updated_at="2026-01-01")
+    elsewhere = a_version("off:4", ("FR",), votes=5)
+    listed = versions.ordered([local, unknown, elsewhere], PRIORITIES)
+    assert listed[0] is unknown  # the most recent comes first in the order of the build
+    assert versions.choose_served(listed, "US") is local  # the 5 votes are for another country
+    assert versions.choose_served(listed) is elsewhere
+    unknown["votes"] = 1
+    assert versions.choose_served(listed, "US") is unknown
+
+    # Nobody lists the country and nothing is usable: unknown passes elsewhere, and when
+    # every version is of another country none is dropped.
+    abroad = a_version("usda:5", ("US",), plausible=False, updated_at="2026-06-01")
+    nowhere = a_version("off:5", (), plausible=False, updated_at="2020-01-01")
+    assert versions.choose_served(versions.ordered([abroad, nowhere], PRIORITIES)) is abroad
+    assert versions.choose_served(versions.ordered([abroad, nowhere], PRIORITIES), "FR") is nowhere
+    assert versions.choose_served([abroad], "FR") is abroad
+
+
+def test_order_of_the_build_puts_sources_first_and_the_oldest_proposal_first() -> None:
+    """Sources by date, then users by age: a later proposal never passes an earlier one."""
+    older_source = a_version("usda:1", updated_at="2023-02-01")
+    recent_source = a_version("off:1", updated_at="2026-10-10")
+    undated_source = a_version("off:2", updated_at="")
+    first_proposal = a_version("kratheos:v:b", updated_at="2026-10-12")
+    later_proposal = a_version("kratheos:v:a", updated_at="2026-10-13")
+    same_day = a_version("kratheos:v:c", updated_at="2026-10-12")
+    product = a_version("kratheos:1234", updated_at="2026-10-12")
+    incomplete = a_version("usda:9", has_macros=False, updated_at="2026-12-31")
+    implausible = a_version("usda:8", plausible=False, updated_at="2026-12-31")
+    everything = [later_proposal, implausible, same_day, older_source, incomplete, product]
+    everything += [first_proposal, undated_source, recent_source]
+    assert versions.ordered(everything, PRIORITIES) == [
+        recent_source,
+        older_source,
+        undated_source,
+        product,  # the same day as two proposals: the identifier decides
+        first_proposal,
+        same_day,
+        later_proposal,
+        incomplete,
+        implausible,
+    ]
+    # Equal votes among users' versions: the oldest keeps its place.
+    proposals = versions.ordered([later_proposal, first_proposal], PRIORITIES)
+    for version in proposals:
+        version["votes"] = 1
+    assert versions.choose_served(proposals) is first_proposal
+    later_proposal["votes"] = 2
+    assert versions.choose_served(proposals) is later_proposal
 
 
 def test_versions_disagree_uses_the_tolerance_of_the_sources() -> None:

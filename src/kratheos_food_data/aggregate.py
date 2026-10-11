@@ -34,10 +34,12 @@ of people who voted for it, and one of them is served.
   product added in Kratheos only gives them when no source knows the barcode.
 * Whose values are served: the version with the most votes, except that a
   version coming from a user (a product added in Kratheos, a version
-  proposed by a user) needs a minimum number of votes to be served instead
-  of a record of a source. A tie, or no vote at all, falls back to the rule
-  above: plausible values, complete macros, most recent, fixed source order.
-  With an empty layer this is the preferred record, as before.
+  proposed by a user) needs a minimum number of votes to be served while a
+  record of a source has plausible values and the four macros. Equal votes,
+  or no vote at all: plausible values, complete macros, a source before a
+  user; then among sources the rule above (most recent, fixed source order),
+  among users the oldest. With an empty layer this is the preferred record,
+  as before. `versions.py` states the whole rule.
 * Translations give a food the names it lacks. A translation never replaces
   a name the food already has; every name records where it comes from.
 
@@ -436,12 +438,15 @@ def _food_versions_select(relation: str, user_version_votes: int) -> str:
     The versions of a food are its own record, the other records sharing its
     barcode and the versions proposed by users. Each gets its votes, its
     position in the order of the build, and whether it is the one served
-    when no country is asked for.
+    when no country is asked for. The rule is the one of `versions.py`,
+    without its country step: a version of a user below the threshold is
+    left out when a version of a source is usable (plausible, with the four
+    macros); then the most votes, then the order of the build.
 
     Args:
         relation: Table or view holding the records of every source.
         user_version_votes: Votes a version coming from a user needs to be
-            served instead of a record of a source.
+            served when a version of a source is usable.
 
     Returns:
         A SELECT with `food_id`, `version_id`, `origin`, `votes`, `position`,
@@ -450,8 +455,10 @@ def _food_versions_select(relation: str, user_version_votes: int) -> str:
     own = ", ".join(f"f.{name}" for name in VERSION_COLUMNS)
     other = ", ".join(f"r.{name}" for name in VERSION_COLUMNS)
     eligible = (
-        f"(origin = '{ORIGIN_SOURCE}' OR votes >= {int(user_version_votes)} OR NOT has_source)"
+        f"(origin = '{ORIGIN_SOURCE}' OR votes >= {int(user_version_votes)}"
+        " OR NOT has_usable_source)"
     )
+    from_user = f"(p.source = '{kratheos.SOURCE_ID}')"
     return f"""
     WITH several AS (
         SELECT id FROM foods_base WHERE len(other_records) > 0
@@ -480,19 +487,28 @@ def _food_versions_select(relation: str, user_version_votes: int) -> str:
             coalesce(k.votes, 0) AS votes,
             row_number() OVER (
                 PARTITION BY p.food_id
-                ORDER BY p.plausible DESC, p.has_macros DESC, p.updated_at DESC NULLS LAST,
-                         o.priority ASC, p.version_id ASC
+                ORDER BY
+                    p.plausible DESC,
+                    p.has_macros DESC,
+                    {from_user} ASC,
+                    CASE WHEN NOT {from_user} THEN p.updated_at END DESC NULLS LAST,
+                    CASE WHEN NOT {from_user} THEN o.priority END ASC,
+                    CASE WHEN {from_user} THEN p.updated_at END ASC NULLS LAST,
+                    p.version_id ASC
             ) AS position
         FROM listed AS p
         JOIN source_order AS o ON o.source = p.source
         LEFT JOIN kratheos_votes AS k ON k.version_id = p.version_id
     ),
     judged AS (
-        SELECT *, bool_or(origin = '{ORIGIN_SOURCE}') OVER (PARTITION BY food_id) AS has_source
+        SELECT
+            *,
+            bool_or(origin = '{ORIGIN_SOURCE}' AND plausible AND has_macros)
+                OVER (PARTITION BY food_id) AS has_usable_source
         FROM voted
     )
     SELECT
-        * EXCLUDE (has_source),
+        * EXCLUDE (has_usable_source),
         row_number() OVER (
             PARTITION BY food_id ORDER BY {eligible} DESC, votes DESC, position ASC
         ) = 1 AS served

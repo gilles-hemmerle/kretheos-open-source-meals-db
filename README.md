@@ -220,22 +220,33 @@ is kept in `versions`, with the number of people who voted for it.
   [aggregation rule](#what-is-in-dist) prefers among the sources; a product
   added in Kratheos only gives them when no source knows the barcode. It does
   not change with the votes.
-- **Whose values are served**:
-  1. a version entered in Kratheos (`origin` `user`: a product added, a
-     version proposed) needs at least 3 votes to be served instead of a
-     record of a source. The number is a setting (`--user-version-votes`,
-     `FOOD_DATA_USER_VERSION_VOTES`), recorded in `meta`. A food no source
-     knows has only such versions: they all count;
-  2. a service that knows the country of a person keeps the versions that
-     list it, when at least one does;
-  3. the most voted wins;
-  4. a tie, or no vote at all: plausible values, complete macros, most
-     recent, fixed source order, then the identifier.
+- **Whose values are served.** A version is "usable" when its values are
+  plausible and it has the four macros.
+  1. *Threshold.* A version entered in Kratheos (`origin` `user`: a product
+     added, a version proposed) with fewer than 3 votes is left out when a
+     record of a source is usable. The number is a setting
+     (`--user-version-votes`, `FOOD_DATA_USER_VERSION_VOTES`), recorded in
+     `meta`. When no record of a source is usable (148 803 foods only have
+     implausible source values), every such version counts: one person's
+     plausible entry replaces them.
+  2. *Country.* A service that knows the country of a person drops the
+     versions that list other countries and keeps those that list the
+     country or none, provided one of those listing it is usable, or nothing
+     is usable at all: a country never trades usable values for values that
+     are not.
+  3. *Order*, the first wins: the most votes; plausible values; complete
+     macros; listing the country asked for; a source before a user; then
+     among sources the most recent, the fixed source order and the
+     identifier, among users the oldest and the identifier.
+
+  So a user's version needs strictly more votes than a source to pass it,
+  and a later proposal strictly more than an earlier one.
 
 The row of a food in `foods` holds the values served when no country is
 asked for (`record_id` names the version), so someone who only reads `foods`
 gets one coherent answer. With an empty layer that is the preferred record of
-each barcode, exactly as a build without votes always was.
+each barcode, exactly as a build without votes always was. `versions.position`
+is the order of the build: steps 3 without the votes and the country.
 
 ```sql
 SELECT v.version_id, v.origin, v.votes, v.served, v.countries, v.energy_kcal
