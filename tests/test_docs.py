@@ -7,15 +7,18 @@ every enabled source must be in ATTRIBUTION.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
 from conftest import REPOSITORY
 
-from kratheos_food_data import kratheos, schema, sqlite_export
+from kratheos_food_data import cli, kratheos, schema, sqlite_export, versions
 from kratheos_food_data.config import Source
+from kratheos_food_data.service import api, settings
 
 README = (REPOSITORY / "README.md").read_text(encoding="utf-8")
+API = (REPOSITORY / "docs" / "api.md").read_text(encoding="utf-8")
 
 
 def test_readme_names_every_column_and_flag() -> None:
@@ -89,3 +92,71 @@ def test_stored_small_sources_match_their_pinned_checksums(
             assert entry.sha256 in (None, sha256)
             assert entry.md5 in (None, md5)
 
+
+def test_api_reference_holds_the_contract_and_follows_the_code() -> None:
+    """Every endpoint, every error code and every field is in docs/api.md."""
+    assert "## Contract between the food service and the Kratheos backend (version 2)" in API
+    assert api.API_VERSION == 2
+    for endpoint in (
+        "GET /v1/foods/search?q=<text>",
+        "GET /v1/foods/{id}?lang=fr&country=FR",
+        "GET /v1/foods/{id}/versions?country=FR",
+        "GET /v1/barcodes/{code}",
+        "GET /v1/meta",
+        "GET /v1/health",
+        "POST /v1/products",
+        "POST /v1/foods/{id}/versions",
+        "POST /v1/foods/{id}/votes",
+        "POST /v1/foods/{id}/translations",
+        "POST /v1/foods/{id}/reports",
+        "GET /v1/moderation/reports?state=open",
+        "POST /v1/moderation/foods/{id}/hide",
+        "POST /v1/moderation/reports/{report_id}/close",
+    ):
+        assert endpoint in API, endpoint
+    for code, status in api.ERROR_CODES.items():
+        assert f"| {status} | `{code}` |" in API, code
+    for field in ("version_id", "version_origin", "votes", "versions_count", "name_origin"):
+        assert f"`{field}`" in API, field
+    assert f"`{versions.FLAG_VERSIONS_DISAGREE}`" in API
+    assert f"`{versions.FLAG_VERSIONS_DISAGREE}`" in README
+    for flag in (*schema.INFO_FLAGS, *schema.QUALITY_FLAGS):
+        assert f"`{flag}`" in API, flag
+    assert f"at most {api.MAX_USER_VERSIONS} versions proposed by users" in API
+
+
+def test_readme_documents_the_service_its_settings_and_its_commands() -> None:
+    """The settings read from the environment and the commands are in the README."""
+    source = (REPOSITORY / "src" / "kratheos_food_data" / "service" / "settings.py").read_text(
+        encoding="utf-8"
+    )
+    variables = set(re.findall(r"FOOD_DATA_[A-Z_]+", source))
+    assert {"FOOD_DATA_TOKEN", "FOOD_DATA_DIR", "FOOD_DATA_KEY_SECRET"} <= variables
+    for variable in variables:
+        assert f"`{variable}`" in README, variable
+    assert f"`{settings.DEFAULT_PORT}`" in README and f"`{settings.DEFAULT_HOST}`" in README
+    commands = cli._parser()._subparsers._group_actions[0].choices
+    for command in ("serve", "export-layer", "import-layer", "rebuild", "database-files"):
+        assert command in commands and f"food-data {command}" in README, command
+    assert "food-data install-database --url" in README
+    for name in (settings.LIVE_NAME, settings.KEY_NAME, settings.MANIFEST_NAME):
+        assert f"`{name}`" in README, name
+
+
+def test_requirements_file_pins_what_the_lock_file_pins() -> None:
+    """The package and the image install exactly the locked dependencies."""
+    import tomllib
+
+    with (REPOSITORY / "uv.lock").open("rb") as handle:
+        locked = {
+            package["name"]: package["version"] for package in tomllib.load(handle)["package"]
+        }
+    pinned = {}
+    for line in (REPOSITORY / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        if line and not line.startswith(("#", " ")):
+            name, _, version = line.split(";")[0].rstrip(" \\").partition("==")
+            pinned[name] = version.strip()
+    assert set(pinned) == {"duckdb", "openpyxl", "et-xmlfile"}  # what the code runs on
+    for name, version in pinned.items():
+        assert locked[name] == version, name
+    assert "--hash=sha256:" in (REPOSITORY / "requirements.txt").read_text(encoding="utf-8")

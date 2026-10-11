@@ -6,6 +6,12 @@ release/
 work/
 dist/
 
+# Never committed either: the data of a service run from this directory (the
+# main database it serves, its live database with the hashed contributor
+# keys and the reports), and what is laid out to publish a built database.
+data/
+release-database/
+
 # An interrupted download or join, anywhere.
 *.part
 *.part.json

@@ -12,6 +12,19 @@ Commands:
 * `lookup`: find foods in the built database by barcode, identifier or name;
 * `fastfood`: measure how prepared dishes and restaurant chains are covered.
 
+The service (see `docs/api.md` and the README):
+
+* `serve`: answer the API over HTTP, from `food.sqlite` and the live database;
+* `export-layer`: write the public `kratheos.sqlite` from the live database,
+  and commit it when asked;
+* `import-layer`: take over into the live database what a `kratheos.sqlite`
+  holds and it lacks;
+* `rebuild`: export, rebuild into a new file, compare with the database being
+  served, and swap it in when it holds up;
+* `database-files`: lay out what to publish so that others can install the
+  database without rebuilding it;
+* `install-database`: download such a database, verify it and swap it in.
+
 Run `food-data <command> --help` for the options of a command.
 """
 
@@ -23,6 +36,7 @@ import sys
 from pathlib import Path
 
 from . import __version__, fastfood, kratheos, lookup, mirror, sqlite_export
+from .aggregate import DEFAULT_USER_VERSION_VOTES
 from .build import (
     DEFAULT_MIN_FREE_GB,
     FOOD_DATABASE_NAME,
@@ -34,6 +48,11 @@ from .build import (
 )
 from .config import ConfigError, load_sources
 from .download import DownloadError
+from .service import export, httpd, maintenance
+from .service.live import LiveStore
+from .service.settings import DEFAULT_HOST, DEFAULT_PORT, Settings, SettingsError, load_settings
+
+EXIT_REFUSED = 2
 
 LISTED_IDENTIFIERS = 50
 
@@ -92,6 +111,34 @@ def _add_input_options(command: argparse.ArgumentParser) -> None:
         default=DEFAULT_MIN_FREE_GB,
         help=f"stop rather than leave less free disk space (default {DEFAULT_MIN_FREE_GB:g})",
     )
+    command.add_argument(
+        "--user-version-votes",
+        type=int,
+        help="votes a version coming from a user needs to be served instead of a record of a"
+        f" source (default: FOOD_DATA_USER_VERSION_VOTES, else {DEFAULT_USER_VERSION_VOTES})",
+    )
+
+
+def _add_service_options(command: argparse.ArgumentParser, live: bool = True) -> None:
+    """Add the options saying where the files of the service are.
+
+    Args:
+        command: The sub-command parser to complete.
+        live: Also add the option naming the live database.
+    """
+    command.add_argument(
+        "--database",
+        type=Path,
+        help="food.sqlite being served (default: FOOD_DATA_DATABASE, else food.sqlite in"
+        " FOOD_DATA_DIR, else data/food.sqlite)",
+    )
+    if live:
+        command.add_argument(
+            "--live",
+            type=Path,
+            help="the live database (default: FOOD_DATA_LIVE, else live.sqlite in FOOD_DATA_DIR,"
+            " else data/live.sqlite)",
+        )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -147,6 +194,92 @@ def _parser() -> argparse.ArgumentParser:
     chains = commands.add_parser("fastfood", help="measure dishes and restaurant chains")
     chains.add_argument("--json", action="store_true", help="print JSON instead of text")
     chains.add_argument("--examples", type=int, default=4, help="examples per group")
+
+    serve = commands.add_parser("serve", help="answer the API over HTTP")
+    _add_service_options(serve)
+    serve.add_argument("--host", help=f"address to listen on (default {DEFAULT_HOST})")
+    serve.add_argument("--port", type=int, help=f"port to listen on (default {DEFAULT_PORT})")
+    serve.add_argument(
+        "--user-version-votes",
+        type=int,
+        help="votes a version coming from a user needs to be served instead of a record of a"
+        f" source (default: FOOD_DATA_USER_VERSION_VOTES, else {DEFAULT_USER_VERSION_VOTES})",
+    )
+
+    layer_out = commands.add_parser(
+        "export-layer", help="write the public kratheos.sqlite from the live database"
+    )
+    layer_out.add_argument("--live", type=Path, help="the live database")
+    layer_out.add_argument(
+        "--out", type=Path, help="file to write (default: kratheos.sqlite of the repository)"
+    )
+    layer_out.add_argument(
+        "--commit", action="store_true", help="commit the file, alone, with a dated message"
+    )
+    layer_out.add_argument(
+        "--push", action="store_true", help="push after the commit, when a remote exists"
+    )
+    layer_out.add_argument(
+        "--force",
+        action="store_true",
+        help="write even when an empty live database would empty a layer holding data",
+    )
+
+    layer_in = commands.add_parser(
+        "import-layer", help="take over into the live database what a kratheos.sqlite holds"
+    )
+    layer_in.add_argument(
+        "file", type=Path, nargs="?", help="default: kratheos.sqlite of the repository"
+    )
+    layer_in.add_argument("--live", type=Path, help="the live database")
+
+    again = commands.add_parser(
+        "rebuild", help="export, rebuild, compare with the database served, then swap it in"
+    )
+    _add_input_options(again)
+    _add_service_options(again)
+    again.add_argument(
+        "--no-export",
+        action="store_true",
+        help="build with kratheos.sqlite as it is, without exporting the live database first",
+    )
+    again.add_argument(
+        "--max-loss",
+        type=float,
+        default=maintenance.DEFAULT_MAX_LOSS,
+        help="largest share of the foods being served that may disappear"
+        f" (default {maintenance.DEFAULT_MAX_LOSS})",
+    )
+
+    publish = commands.add_parser(
+        "database-files", help="lay out what to publish so that others can install the database"
+    )
+    _add_service_options(publish, live=False)
+    publish.add_argument(
+        "--out", type=Path, help="destination directory (default: release-database/)"
+    )
+
+    install = commands.add_parser(
+        "install-database", help="download a ready-made database, verify it and swap it in"
+    )
+    install.add_argument("--url", required=True, help="address the database was published under")
+    _add_service_options(install)
+    install.add_argument(
+        "--max-loss",
+        type=float,
+        default=maintenance.DEFAULT_MAX_LOSS,
+        help="largest share of the foods being served that may disappear"
+        f" (default {maintenance.DEFAULT_MAX_LOSS})",
+    )
+    install.add_argument(
+        "--force", action="store_true", help="install even when the comparison says no"
+    )
+    install.add_argument(
+        "--min-free-gb",
+        type=float,
+        default=DEFAULT_MIN_FREE_GB,
+        help=f"stop rather than leave less free disk space (default {DEFAULT_MIN_FREE_GB:g})",
+    )
     return parser
 
 
@@ -167,7 +300,109 @@ def _options(args: argparse.Namespace) -> BuildOptions:
         force_download=args.force_download,
         all_formats=getattr(args, "all_formats", False),
         min_free_gb=args.min_free_gb,
+        user_version_votes=_settings(args, Path.cwd(), with_secret=False).user_version_votes,
     )
+
+
+def _settings(args: argparse.Namespace, root: Path, with_secret: bool = True) -> Settings:
+    """Read the settings of the service for a command.
+
+    Args:
+        args: The parsed arguments.
+        root: Directory of the repository.
+        with_secret: Read, or create, the secret of the contributor keys.
+
+    Returns:
+        The settings: options first, then the environment, then the defaults.
+    """
+    layer = root / kratheos.FILE_NAME
+    return load_settings(
+        root,
+        database=getattr(args, "database", None),
+        live=getattr(args, "live", None),
+        host=getattr(args, "host", None),
+        port=getattr(args, "port", None),
+        user_version_votes=getattr(args, "user_version_votes", None),
+        layer=layer if layer.exists() else None,
+        with_secret=with_secret,
+    )
+
+
+def _run_service_command(args: argparse.Namespace, workspace: Workspace, root: Path) -> int:
+    """Run one of the commands of the service.
+
+    Args:
+        args: The parsed arguments.
+        workspace: The directories of the repository.
+        root: Directory of the repository.
+
+    Returns:
+        The process exit status.
+    """
+    if args.command == "serve":
+        httpd.serve(_settings(args, root))
+    elif args.command == "export-layer":
+        settings = _settings(args, root, with_secret=False)
+        out = (args.out or workspace.kratheos).resolve()
+        summary = export.export_layer(settings.live, out, force=args.force)
+        state = "written" if summary["changed"] else "unchanged"
+        print(
+            f"{out}: {state}; {summary['products']} products, {summary['versions']} versions,"
+            f" {summary['votes']} votes on {summary['voted_versions']} versions,"
+            f" {summary['translations']} names; sha256 {summary['sha256']}"
+        )
+        if args.commit or args.push:
+            export.commit_layer(out, summary, push=args.push, log=_log)
+    elif args.command == "import-layer":
+        settings = _settings(args, root)
+        layer = kratheos.read_layer((args.file or workspace.kratheos).resolve())
+        store = LiveStore(settings.live, settings.key_secret)
+        try:
+            added = store.import_layer(layer)
+        finally:
+            store.close()
+        print(
+            f"{settings.live}: took over {added['products']} products, {added['versions']}"
+            f" versions, {added['translations']} names and {added['votes']} votes"
+        )
+    elif args.command == "rebuild":
+        settings = _settings(args, root, with_secret=False)
+        try:
+            maintenance.rebuild(
+                workspace,
+                _options(args),
+                settings.database,
+                None if args.no_export else settings.live,
+                max_loss=args.max_loss,
+                log=_log,
+            )
+        except maintenance.Refused as refusal:
+            print(f"refused, the database being served stays: {refusal}", file=sys.stderr)
+            return EXIT_REFUSED
+    elif args.command == "database-files":
+        settings = _settings(args, root, with_secret=False)
+        out_dir = (args.out or root / "release-database").resolve()
+        layer = workspace.kratheos if workspace.kratheos.exists() else None
+        for entry in maintenance.database_files(settings.database, layer, out_dir, log=_log):
+            print(f"{entry['size']:>14,}  {entry['sha256']}  {entry['asset']}")
+        print(f"publish the files of {out_dir} under one address")
+    elif args.command == "install-database":
+        settings = _settings(args, root)
+        try:
+            maintenance.install_database(
+                args.url,
+                settings.database,
+                settings.live,
+                settings.key_secret,
+                max_loss=args.max_loss,
+                force=args.force,
+                min_free_gb=args.min_free_gb,
+                log=_log,
+            )
+        except maintenance.Refused as refusal:
+            print(f"refused, the database being served stays: {refusal}", file=sys.stderr)
+            return EXIT_REFUSED
+    return 0
 
 
 def _print_sources(root: Path) -> None:
@@ -253,12 +488,17 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(report, indent=2, ensure_ascii=False))
             else:
                 print(fastfood.format_report(report))
+        else:
+            return _run_service_command(args, workspace, root)
     except (
         ConfigError,
         DownloadError,
         DiskSpaceError,
         FileNotFoundError,
         kratheos.LayerError,
+        SettingsError,
+        export.ExportRefused,
+        RuntimeError,
         ValueError,
     ) as error:
         print(f"error: {error}", file=sys.stderr)
