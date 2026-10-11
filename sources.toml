@@ -1,0 +1,288 @@
+# Declarative list of the food databases this project knows about.
+#
+# One [[source]] table per database. A source is only built when `enabled` is
+# true; a disabled source stays listed with the `reason` it is not used.
+#
+# Fields of a source:
+#   id            short stable identifier, prefix of every record id
+#   name          name of the database
+#   publisher     who publishes it
+#   homepage      page of the database
+#   adapter       module of kratheos_food_data.adapters that reads it
+#   version       release of the files listed below ("rolling" = taken from the
+#                 download itself on each build)
+#   released      date of that release
+#   kinds         what it holds: "generic" foods and/or barcoded "product"s
+#   priority      fixed source order, lowest first; the last tie-breaker when a
+#                 preferred record is chosen for a barcode
+#   licence       SPDX identifier, or a short name when SPDX has none
+#   licence_name  full name of the licence or terms
+#   licence_url   text of the licence or terms
+#   terms_url     publisher page where the terms were read
+#   terms_quote   sentence(s) of the publisher that allow redistribution
+#   terms_checked date the terms were last read by a human
+#   attribution   text to reproduce next to the data
+#   share_alike   true when the licence requires derived databases to keep it
+#   enabled       whether the build uses the source
+#   reason        why it is disabled (empty when enabled)
+#
+# Fields of a [[source.files]] entry:
+#   name          file name under downloads/<id>/
+#   url           where to download it
+#   sha256 / md5  checksum pinned for a file published under a versioned
+#                 address. A pinned file is never downloaded twice, and the
+#                 build stops if the publisher replaces it: read what changed,
+#                 then update the version and the checksum here. After a first
+#                 download the checksums are in downloads/<id>/<name>.meta.json
+
+[[source]]
+id = "off"
+name = "Open Food Facts"
+publisher = "Open Food Facts (non-profit association, France)"
+homepage = "https://world.openfoodfacts.org/"
+adapter = "openfoodfacts"
+version = "rolling"
+released = ""
+kinds = ["product"]
+priority = 2
+licence = "ODbL-1.0"
+licence_name = "Open Database License 1.0 (database), Database Contents License 1.0 (individual contents)"
+licence_url = "https://opendatacommons.org/licenses/odbl/1-0/"
+terms_url = "https://world.openfoodfacts.org/terms-of-use"
+terms_quote = "The Open Food Facts database is available under the Open Database License. Individual contents of the database are available under the Database Contents License. [...] The individuals and entities who reproduce or re-use information, data and/or photos from the Open Food Facts site or database have to mention the licence and to attribute the authorship to Open Food Facts with a link to https://openfoodfacts.org [...]. Derivative works must be shared under the same conditions."
+terms_checked = "2026-10-11"
+attribution = "Contains data from Open Food Facts (https://openfoodfacts.org), available under the Open Database License (ODbL) 1.0; individual contents under the Database Contents License (DbCL) 1.0."
+share_alike = true
+enabled = true
+reason = ""
+
+  [[source.files]]
+  name = "food.parquet"
+  url = "https://huggingface.co/datasets/openfoodfacts/product-database/resolve/main/food.parquet"
+
+  [[source.files]]
+  name = "countries.json"
+  url = "https://static.openfoodfacts.org/data/taxonomies/countries.json"
+
+[[source]]
+id = "usda"
+name = "USDA FoodData Central"
+publisher = "U.S. Department of Agriculture, Agricultural Research Service"
+homepage = "https://fdc.nal.usda.gov/"
+adapter = "usda_fdc"
+version = "2026-04 (Foundation Foods and Branded Foods 2026-04-30, FNDDS 2021-2023 of 2024-10-31, SR Legacy 2018-04)"
+released = "2026-04-30"
+kinds = ["generic", "product"]
+priority = 1
+licence = "CC0-1.0"
+licence_name = "Creative Commons CC0 1.0 Universal (public domain)"
+licence_url = "https://creativecommons.org/publicdomain/zero/1.0/"
+terms_url = "https://fdc.nal.usda.gov/api-guide"
+terms_quote = "USDA FoodData Central data are in the public domain and they are not copyrighted. They are published under CC0 1.0 Universal (CC0 1.0). No permission is needed for their use, but we request that users list FoodData Central as the source of the data [...]."
+terms_checked = "2026-10-11"
+attribution = "U.S. Department of Agriculture, Agricultural Research Service. FoodData Central, 2026. fdc.nal.usda.gov."
+share_alike = false
+enabled = true
+reason = ""
+
+  [[source.files]]
+  name = "foundation_food_csv.zip"
+  url = "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_csv_2026-04-30.zip"
+  sha256 = "70457ee9d9342f43bda2010318c85f04210c689fdeb9cd2da4c513b0e8dbc655"
+
+  [[source.files]]
+  name = "sr_legacy_food_csv.zip"
+  url = "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_csv_2018-04.zip"
+  sha256 = "b80817294b8850530aaedf2e515c02593b1824f763a0ff356e5c2081643e6fd0"
+
+  [[source.files]]
+  name = "survey_food_csv.zip"
+  url = "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_survey_food_csv_2024-10-31.zip"
+  sha256 = "5ccc25ec2777a8982fbb61378a42f415316173eb11e48c9a8ba4cb19f5a4f29c"
+
+  [[source.files]]
+  name = "branded_food_csv.zip"
+  url = "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_branded_food_csv_2026-04-30.zip"
+  sha256 = "26050a5d03197469813754743a21ee0fad4ccf22b6aac2a995846a987719fc49"
+
+[[source]]
+id = "ciqual"
+name = "Ciqual French food composition table"
+publisher = "Anses (Agence nationale de sécurité sanitaire de l'alimentation, de l'environnement et du travail), France"
+homepage = "https://ciqual.anses.fr/"
+adapter = "ciqual"
+version = "2025 (files of 2025-11-03, dataset version 1.0)"
+released = "2025-11-19"
+kinds = ["generic"]
+priority = 3
+licence = "etalab-2.0"
+licence_name = "Licence Ouverte / Open Licence 2.0 (Etalab)"
+licence_url = "https://spdx.org/licenses/etalab-2.0.html"
+terms_url = "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/RDMHWY"
+terms_quote = "Les données et les informations de la Table Ciqual 2025 sont mises à disposition du public par l'Agence nationale de sécurité sanitaire de l'alimentation, de l'environnement et du travail (Anses). Elles peuvent être reproduites, obligatoirement avec la référence explicite à la source : \"Anses. 2025. Table de composition nutritionnelle des aliments Ciqual\". (Dataset licence: etalab 2.0.)"
+terms_checked = "2026-10-11"
+attribution = "Anses. 2025. Table de composition nutritionnelle des aliments Ciqual 2025. https://doi.org/10.57745/RDMHWY"
+share_alike = false
+enabled = true
+reason = ""
+
+  [[source.files]]
+  name = "alim.xml"
+  url = "https://entrepot.recherche.data.gouv.fr/api/access/datafile/:persistentId?persistentId=doi:10.57745/OH8KXC"
+  sha256 = "e0b1de25b3039028205e9d54a96892e403e1b313c2efeb41180fabe132627478"
+  md5 = "8e1171d63cee4b6010cfce25dd29243d"
+
+  [[source.files]]
+  name = "alim_grp.xml"
+  url = "https://entrepot.recherche.data.gouv.fr/api/access/datafile/:persistentId?persistentId=doi:10.57745/FMNIUZ"
+  sha256 = "e216928be1001aed15ba1b120405b70a98145da2a1a76026d6e33542bd5e39dc"
+  md5 = "c31aeea90349c3aab86f98ef5f4f10da"
+
+  [[source.files]]
+  name = "const.xml"
+  url = "https://entrepot.recherche.data.gouv.fr/api/access/datafile/:persistentId?persistentId=doi:10.57745/FWSPCX"
+  sha256 = "3a231ea3e9836e4ac0b6ff94511e010210b2523d1b8b486c6b29e211066ba3f3"
+  md5 = "d8f2f25fdacb887bc993a6eeaf80f203"
+
+  [[source.files]]
+  name = "compo.xml"
+  url = "https://entrepot.recherche.data.gouv.fr/api/access/datafile/:persistentId?persistentId=doi:10.57745/O73GDX"
+  sha256 = "8c46a9032ece4eab4ffccc9dfcb0c490ec2f416aa664cc1ee013b241c6bdd4af"
+  md5 = "2da725585946434df320d8041631998b"
+
+[[source]]
+id = "swiss"
+name = "Swiss Food Composition Database"
+publisher = "Federal Food Safety and Veterinary Office (FSVO / OSAV / BLV), Switzerland"
+homepage = "https://naehrwertdaten.ch/"
+adapter = "swiss"
+version = "7.1"
+released = "2026-07-15"
+kinds = ["generic"]
+priority = 4
+licence = "opendata.swiss-BY"
+licence_name = "opendata.swiss terms of use: Open use. Must provide the source."
+licence_url = "https://opendata.swiss/en/terms-of-use"
+terms_url = "https://naehrwertdaten.ch/en/downloads/"
+terms_quote = "Downloading is free of charge and the data may also be used for commercial purposes (e.g. integration into food composition calculation software or nutrition diary app) and scientific purposes, subject to acknowledgment of the source. (opendata.swiss lists the dataset under: Open use. Must provide the source. You may use this dataset for non-commercial purposes. You may use this dataset for commercial purposes. You must provide the source (author, title and link to the dataset).)"
+terms_checked = "2026-10-11"
+attribution = "Federal Food Safety and Veterinary Office FSVO, Swiss Food Composition Database, version 7.1, https://naehrwertdaten.ch/"
+share_alike = false
+enabled = true
+reason = ""
+
+  # One workbook per language; the values are the same, only the names and
+  # the category labels change.
+  [[source.files]]
+  name = "swiss_en.xlsx"
+  url = "https://naehrwertdaten.ch/wp-content/uploads/2026/07/Swiss_food_composition_database.xlsx"
+  sha256 = "323bae2eecd639d2c3b3bf3797d30b1426ccb0253fb62810f522778b38089196"
+
+  [[source.files]]
+  name = "swiss_de.xlsx"
+  url = "https://naehrwertdaten.ch/wp-content/uploads/2026/07/Schweizer_Nahrwertdatenbank.xlsx"
+  sha256 = "f4bb854944ef811f9b8463984389f8121e73278c4fd24fc3e8d16336cb711270"
+
+  [[source.files]]
+  name = "swiss_fr.xlsx"
+  url = "https://naehrwertdaten.ch/wp-content/uploads/2026/07/Base_de_donnees_suisse_des_valeurs_nutritives.xlsx"
+  sha256 = "1692aa241728f25d4823a6c97bb36c393f7f64173a00a8ed4175b1bf926a5405"
+
+  [[source.files]]
+  name = "swiss_it.xlsx"
+  url = "https://naehrwertdaten.ch/wp-content/uploads/2026/07/Banca_dati_svizzera_dei_valori_nutritivi.xlsx"
+  sha256 = "7427ce03b3d20a0e676935c5bc6c06152b5e1f204e845afbe45d311abddeae23"
+
+[[source]]
+id = "cnf"
+name = "Canadian Nutrient File"
+publisher = "Health Canada"
+homepage = "https://open.canada.ca/data/en/dataset/1b6139bd-ed7e-4043-bc28-ff00e10f3109"
+adapter = "cnf"
+version = "2026"
+released = "2026-05-14"
+kinds = ["generic"]
+priority = 5
+licence = "OGL-Canada-2.0"
+licence_name = "Open Government Licence - Canada 2.0"
+licence_url = "https://open.canada.ca/en/open-government-licence-canada"
+terms_url = "https://open.canada.ca/data/en/dataset/1b6139bd-ed7e-4043-bc28-ff00e10f3109"
+terms_quote = "Licence: Open Government Licence - Canada. (Licence text: You are free to: Copy, modify, publish, translate, adapt, distribute or otherwise use the Information in any medium, mode or format for any lawful purpose.)"
+terms_checked = "2026-10-11"
+attribution = "Health Canada, Canadian Nutrient File, 2026. Contains information licensed under the Open Government Licence - Canada."
+share_alike = false
+enabled = true
+reason = ""
+
+  [[source.files]]
+  name = "cnf_fcen_all-files-data_2026.zip"
+  url = "https://open.canada.ca/data/dataset/1b6139bd-ed7e-4043-bc28-ff00e10f3109/resource/019f2a90-e3a9-489d-b6e1-f74f4ba1d006/download/cnf_fcen_all-files-data_2026.zip"
+  sha256 = "f5faad8977ee6bbdd9d69c8649077cacd87d8658ad200509a4047db1e29edcdd"
+
+[[source]]
+id = "cofid"
+name = "McCance and Widdowson's The Composition of Foods Integrated Dataset (CoFID)"
+publisher = "Public Health England / Office for Health Improvement and Disparities, United Kingdom"
+homepage = "https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid"
+adapter = "cofid"
+version = "2021"
+released = "2021-03-19"
+kinds = ["generic"]
+priority = 6
+licence = "OGL-UK-3.0"
+licence_name = "Open Government Licence v3.0 (United Kingdom)"
+licence_url = "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+terms_url = "https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid"
+terms_quote = "All content is available under the Open Government Licence v3.0, except where otherwise stated. (Licence text: You are free to: copy, publish, distribute and transmit the Information; adapt the Information; exploit the Information commercially and non-commercially for example, by combining it with other Information, or by including it in your own product or application.)"
+terms_checked = "2026-10-11"
+attribution = "Public Health England, McCance and Widdowson's The Composition of Foods Integrated Dataset 2021. Contains public sector information licensed under the Open Government Licence v3.0."
+share_alike = false
+enabled = true
+reason = ""
+
+  [[source.files]]
+  name = "McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021.xlsx"
+  url = "https://assets.publishing.service.gov.uk/media/60538b91e90e07527df82ae4/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021..xlsx"
+  sha256 = "436e9445ef2adb2a75f3d7edd51302de3adad25385f9795fc94ba58bd030e97d"
+
+[[source]]
+id = "bls"
+name = "Bundeslebensmittelschlüssel (BLS) 4.0"
+publisher = "Max Rubner-Institut (MRI), Germany"
+homepage = "https://www.blsdb.de/"
+adapter = ""
+version = "4.0"
+released = "2025-12-17"
+kinds = ["generic"]
+priority = 90
+licence = "unclear"
+licence_name = "No named licence"
+licence_url = ""
+terms_url = "https://www.blsdb.de/faq"
+terms_quote = "Der BLS 4.0 wird kostenfrei und ohne Lizenzbarrieren bereitgestellt. Die Daten können frei genutzt werden - für wissenschaftliche Forschung und Lehre, Ernährungsberatung und -planung, App- und Softwareentwicklung sowie in der Lebensmittelindustrie."
+terms_checked = "2026-10-11"
+attribution = "Max Rubner-Institut, Bundeslebensmittelschlüssel (BLS) 4.0, https://doi.org/10.25826/Data20251217-134202-0"
+share_alike = false
+enabled = false
+reason = "Free to use since December 2025, but the publisher names no licence and says nothing about redistribution, while the imprint of the same site forbids copying its documents to another server without written permission. Ask the MRI for written terms before enabling."
+
+[[source]]
+id = "foodrepo"
+name = "FoodRepo / openfood.ch"
+publisher = "EPFL Digital Epidemiology Lab, Switzerland"
+homepage = "https://www.foodrepo.org/"
+adapter = ""
+version = ""
+released = ""
+kinds = ["product"]
+priority = 91
+licence = "unclear"
+licence_name = "CC BY 4.0 was announced for the data while the service ran"
+licence_url = ""
+terms_url = "https://www.foodrepo.org/"
+terms_quote = "This site has moved to openfoodfacts.org."
+terms_checked = "2026-10-11"
+attribution = ""
+share_alike = false
+enabled = false
+reason = "The service is closed: its site only says it moved to Open Food Facts, and the publisher no longer offers a download or a licence page to read. Third-party copies of a 2017 dump exist but their terms cannot be checked on the publisher's own page."
