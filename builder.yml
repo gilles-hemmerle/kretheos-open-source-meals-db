@@ -1,3 +1,5 @@
+# Build of the Debian package by the company builder: a .deb for Debian trixie,
+# built from debian/ each time a tag is pushed.
 flows:
 - deb
 options:

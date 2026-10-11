@@ -572,6 +572,15 @@ that authenticates people:
 - every request is bounded (64 KiB of body) and validated; values go through
   the same quality checks as the build before they are accepted.
 
+**Search** uses the stored full-text index, within a time budget (half a
+second by default, a few tens of milliseconds for most texts). Two letters
+match hundreds of thousands of barcoded products, and ranking them is what
+takes a second, so with fewer than three letters or digits only the generic
+foods and the products without barcode are searched (160 000 foods): two
+letters are the beginning of a word, a single letter is a whole word. From
+the third letter on everything is searched, the foods of the country of the
+request first. [`docs/api.md`](docs/api.md#search) has the details.
+
 ### Its files
 
 Everything is in one data directory (`FOOD_DATA_DIR`; `data/` in the

@@ -1,3 +1,5 @@
+# Control file of the Debian package kratheos-food-data: one binary package
+# holding the code of the food service with its own Python environment.
 Source: kratheos-food-data
 Section: web
 Priority: optional
