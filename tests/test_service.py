@@ -297,30 +297,52 @@ def test_reference_foods_come_in_an_order_a_person_can_predict(service: Running)
     ]
 
 
-def test_in_store_barcodes_are_flagged_and_come_after_every_other_product(
-    service: Running, monkeypatch: pytest.MonkeyPatch
+def test_in_store_labels_come_after_every_other_product_and_own_brands_do_not(
+    service: Running, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A number a shop gives to what it packs: last by name, unchanged by barcode."""
-    in_store = "gtin:20095314"  # Edel-Zartbitter-Schokolade
-    assert service.food(in_store)["flags"] == ["barcode_restricted", "in_store_barcode"]
+    """Both forms are flagged; only the 13-digit one is left for the end of a search by name."""
+    own_brand = "gtin:20095314"  # Edel-Zartbitter-Schokolade, 8 digits beginning with 2
+    assert service.food(own_brand)["flags"] == ["barcode_restricted", "in_store_barcode"]
     assert "in_store_barcode" not in service.food(NUTELLA)["flags"]
     # By barcode nothing changes.
     status, by_barcode = service.get("/v1/barcodes/20095314")
-    assert status == 200 and by_barcode["id"] == in_store
-    assert service.found("q=20095314") == [in_store]
-    # By name it is still found when few other products match...
-    assert service.found("q=edel") == [in_store]
-    assert service.found("q=zartbitter&kind=product") == [in_store]
-    # ... after every other product, even one whose name matches less well.
+    assert status == 200 and by_barcode["id"] == own_brand
+    assert service.found("q=20095314") == [own_brand]
+    # The 8-digit number ranks by the ordinary order: its name begins with the text,
+    # so it comes before a product that only holds it; the 13-digit label is last,
+    # although its name is the text typed.
     other = dict(PRODUCT, names={"de": "Schokolade Edelbitter vom Test"})
-    weighed = dict(PRODUCT, barcode="2000000000039", names={"de": "Edel"})
+    label = dict(PRODUCT, barcode="2000000000039", names={"de": "Edel"})
     other_id = service.post("/v1/products", other)[1]["id"]
-    assert service.post("/v1/products", weighed)[1]["id"] == "gtin:2000000000039"
-    assert service.found("q=edel") == [other_id, "gtin:2000000000039", in_store]
-    assert service.found("q=edel&country=CH") == [other_id, "gtin:2000000000039", in_store]
-    # When the other products fill their list, none of them is listed.
-    monkeypatch.setattr(search, "POOL_ALL", 0)
-    assert service.found("q=edel") == [other_id, "gtin:2000000000039"]
+    created = service.post("/v1/products", label)[1]
+    assert created["id"] == "gtin:2000000000039" and "in_store_barcode" in created["flags"]
+    assert service.found("q=edel") == [own_brand, other_id, "gtin:2000000000039"]
+    # The country goes first, as for any product, and the label stays last.
+    assert service.found("q=edel&country=CH") == [other_id, own_brand, "gtin:2000000000039"]
+    assert service.get("/v1/barcodes/2000000000039")[1]["id"] == "gtin:2000000000039"
+
+    # The same in the main database: the cola of the United States, whose name is the
+    # text typed, with the 13-digit in-store number of a counter.
+    assert service.found("q=cola&kind=product") == ["gtin:0049000028911", "gtin:5449000000996"]
+    changed = tmp_path / "changed.sqlite"
+    shutil.copy(service.settings.database, changed)
+    connection = sqlite3.connect(changed)
+    connection.execute(
+        "UPDATE foods SET id = 'gtin:0249000028915', barcode = '0249000028915'"
+        " WHERE id = 'gtin:0049000028911'"
+    )
+    connection.commit()
+    connection.close()
+    os.replace(changed, service.settings.database)
+    with service.api._context() as context:
+        assert context.generation.in_store_blocks == ((14, 14), (15, 15))
+        assert context.generation.in_store_ranked == {15}  # the 8-digit number
+    assert service.found("q=cola&kind=product") == ["gtin:5449000000996", "gtin:0249000028915"]
+    assert service.found("q=zartbitter&kind=product") == [own_brand]
+    assert service.get("/v1/barcodes/0249000028915")[1]["id"] == "gtin:0249000028915"
+    # When the other products fill their list, no label is in the answer.
+    monkeypatch.setattr(search, "POOL_ALL", 1)
+    assert service.found("q=cola&kind=product") == ["gtin:5449000000996"]
 
 
 def test_without_a_kind_the_reference_food_typed_comes_before_the_products(

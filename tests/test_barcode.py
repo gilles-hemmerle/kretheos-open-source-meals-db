@@ -10,6 +10,7 @@ import pytest
 from kratheos_food_data.barcode import (
     check_digit_ok,
     is_in_store,
+    is_in_store_label,
     is_restricted,
     normalize_gtin,
 )
@@ -124,3 +125,27 @@ def test_is_in_store(barcode: str | None, expected: bool) -> None:
     assert is_in_store(barcode) is expected
     if expected:
         assert is_restricted(barcode)  # every in-store number is a restricted one
+
+
+@pytest.mark.parametrize(
+    ("barcode", "expected"),
+    [
+        ("2012345678903", True),  # 13 digits starting with 2: the label of the counter
+        ("0212345678908", True),  # UPC-A starting with 2: variable weight
+        ("0412345678906", True),  # UPC-A starting with 4
+        # The 8-digit in-store numbers are own-brand products: flagged, ranked like any other.
+        ("20095314", False),
+        ("02000008", False),
+        ("04000006", False),
+        ("00123457", False),
+        ("3017620422003", False),
+        ("20000000000004", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_is_in_store_label(barcode: str | None, expected: bool) -> None:
+    """Only the 13-digit in-store numbers are the labels a search by name leaves for the end."""
+    assert is_in_store_label(barcode) is expected
+    if expected:
+        assert is_in_store(barcode)  # every label carries the in-store flag

@@ -200,9 +200,9 @@ served.
    and 4), or an 8-digit number beginning the same way. Such a number names
    another food in the next shop. About one food in ten carries it (380 000,
    nearly all from Open Food Facts). The record is served like any other and
-   a lookup by barcode is unchanged; a search by name puts these foods after
-   every other product (see « Search »). It is a flag of the food record,
-   never of a version. The build has a wider flag on the record of the
+   a lookup by barcode is unchanged; a search by name puts those of 13
+   digits after every other product (see « Search »). It is a flag of the
+   food record, never of a version. The build has a wider flag on the record of the
    source, `barcode_restricted`: the GS1 restricted circulation numbers,
    which also hold every 8-digit number beginning with 0, the own-brand
    products of a few retailers (Trader Joe's, Sainsbury's, Marks & Spencer,
@@ -354,15 +354,18 @@ served.
   compounds are found from their beginning only ("Milch" finds
   "Milchschokolade", not "Vollmilch").
 - **Products** (`kind=product`) are ordered by: the barcode typed; a barcode
-  that is not an in-store number before one that is; the foods of `country`
+  that is not a 13-digit in-store number before one that is; the foods of `country`
   (the version served lists it); a name equal to the text, then beginning
   with it, then the rest; the most scanned products; the shortest name; the
   identifier.
-- **In-store barcodes** (flag `in_store_barcode`) come after every other
-  product. They are left out of what the index ranks: when 120 other
-  products match, those fill the answer and none of them is in it; when
-  fewer do, the first 20 the index finds are added at the very end. A
-  lookup by barcode, and a search by the digits of one, are not concerned.
+- **In-store barcodes** (flag `in_store_barcode`). Those of 13 digits, the
+  labels of the counter (320 000 foods, hardly ever scanned twice), come
+  after every other product: when 120 other products match, those fill the
+  answer and none of them is in it; when fewer do, the best 20 of them are
+  added at the very end. Those of 8 digits are the own-brand products of
+  Lidl, Aldi, Penny or Marks & Spencer: they carry the flag and rank like
+  any product. A lookup by barcode, and a search by the digits of one, are
+  not concerned.
 - **Without `kind`** both are searched. The reference foods whose name, or
   first part, is the text typed come first, in the order of the reference
   foods (40 at most: "pomme" has 37 of them in the five tables, "riz" 3);

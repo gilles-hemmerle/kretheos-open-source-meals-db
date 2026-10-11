@@ -22,8 +22,8 @@ short search look only at generic foods and dishes; the few blocks where the
 generic foods are, which lets a search of reference foods read all those
 that match; whether the foods placed before, or after, the barcoded products
 are all generic foods, in which case what was read of them need not be asked
-of the index again; and the blocks of the in-store barcodes, which a search
-by name leaves for the end.
+of the index again; and the blocks of the in-store barcodes, whose 13-digit
+numbers a search by name leaves for the end.
 """
 
 from __future__ import annotations
@@ -131,6 +131,9 @@ class Generation:
         reference_only_above: The same for the foods placed after them.
         in_store_blocks: The ranges of internal numbers of the products with
             an in-store barcode, for those that sit in one unbroken range.
+        in_store_ranked: Internal numbers, inside those ranges, of the
+            products whose barcode is not a 13-digit number (the 8-digit
+            own-brand numbers, a few cartons): they rank like any product.
         loaded_at: When the service started serving it.
     """
 
@@ -150,6 +153,7 @@ class Generation:
     reference_only_below: bool = False
     reference_only_above: bool = False
     in_store_blocks: tuple[tuple[int, int], ...] = ()
+    in_store_ranked: frozenset[int] = frozenset()
     loaded_at: str = ""
     _idle: queue.LifoQueue = field(default_factory=queue.LifoQueue, repr=False)
     _slots: threading.Semaphore | None = field(default=None, repr=False)
@@ -331,13 +335,21 @@ def _locate_in_store_barcodes(connection: sqlite3.Connection, generation: Genera
         generation: The generation being read, completed in place.
     """
     blocks = []
+    ranked: list[int] = []
+    label = len(GTIN_FIRST) + 13  # length of the identifier of a 13-digit barcode
     for first, after in IN_STORE_PREFIXES:
         lowest, highest, count = connection.execute(
             "SELECT min(pk), max(pk), count(*) FROM foods WHERE id >= ? AND id < ?", (first, after)
         ).fetchone()
         if count and highest - lowest + 1 == count:
             blocks.append((lowest, highest))
+            rows = connection.execute(
+                "SELECT pk FROM foods WHERE id >= ? AND id < ? AND length(id) != ?",
+                (first, after, label),
+            )
+            ranked += [row[0] for row in rows]
     generation.in_store_blocks = tuple(blocks)
+    generation.in_store_ranked = frozenset(ranked)
 
 
 def warm(generation: Generation) -> None:

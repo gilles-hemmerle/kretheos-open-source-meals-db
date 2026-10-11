@@ -122,6 +122,24 @@ def is_in_store(barcode: str | None) -> bool:
     return barcode[0] == "2" or barcode[:2] in ("02", "04")
 
 
+def is_in_store_label(barcode: str | None) -> bool:
+    """Tell whether a canonical barcode is a 13-digit in-store number.
+
+    Those are the labels a shop prints for what it weighs and packs itself,
+    with a weight or a price inside: hundreds of thousands of records named
+    "Poulet" or "Pain complet", hardly ever scanned twice. The 8-digit
+    in-store numbers are something else: the own-brand products of Lidl,
+    Aldi, Penny or Marks & Spencer, which people look for by name.
+
+    Args:
+        barcode: A canonical barcode, as returned by `normalize_gtin`.
+
+    Returns:
+        True for an in-store number of 13 digits.
+    """
+    return bool(barcode) and len(barcode) == 13 and is_in_store(barcode)
+
+
 def _check_digit_sql(expression: str) -> str:
     """Build the SQL expression verifying the check digit of a digit string.
 

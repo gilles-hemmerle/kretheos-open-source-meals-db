@@ -43,7 +43,7 @@ the world are not ranked as well: they would come after every page a person
 reads, and ranking them doubles the time.) They are ordered by:
 
 1. the food carrying the barcode typed;
-2. a barcode that is not an in-store number before one that is;
+2. a barcode that is not a 13-digit in-store number before one that is;
 3. the foods of the country of the request (the version served lists it);
 4. a name equal to the text, then a name beginning with it, then the rest;
 5. the most scanned products first (the popularity of Open Food Facts);
@@ -51,13 +51,15 @@ reads, and ranking them doubles the time.) They are ordered by:
 
 In-store barcodes. A shop numbers what it weighs and packs itself with
 numbers of its own (GTIN-13 beginning with 02, 04 or 20 to 29, and the 8
-digit numbers beginning the same way: `barcode.is_in_store`). One food in
-ten has such a number, and by their short names ("Poulet", "Pain complet")
-they were most of what the index ranked best. They occupy three blocks of
-the index, which are left out of the lists above. They come after every
-other product: when 120 other products match, those fill the answer and none
-of them is in it; when fewer do, the first 20 the index finds are added at
-the very end. A lookup by barcode is not concerned.
+digit numbers beginning the same way: `barcode.is_in_store`). The 13-digit
+ones are the labels of the counter: 320 000 records hardly ever scanned
+twice, which by their short names ("Poulet", "Pain complet") were most of
+what the index ranked best. They come after every other product: the best
+matches of the index are read past them; when 120 other products match,
+those fill the answer and none of them is in it; when fewer do, the best 20
+of them are added at the very end. The 8-digit ones are the own-brand
+products of Lidl, Aldi, Penny or Marks & Spencer: they rank like any
+product. A lookup by barcode is not concerned.
 
 Without `kind`, both are searched: the reference foods whose name, or first
 part, is the text typed come first, in their own order (40 at most);
@@ -82,9 +84,10 @@ import heapq
 import re
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from ..barcode import is_in_store, normalize_gtin
+from ..barcode import is_in_store_label, normalize_gtin
 from ..schema import KIND_GENERIC, KIND_PRODUCT
 from . import catalogue, foods, live, ranking
 from .foods import Context, Food
@@ -96,6 +99,10 @@ SHORT_QUERY_CHARS = 3
 POOL_GENERIC = 50
 POOL_ALL = 120
 POOL_IN_STORE = 20
+# Rows of a ranked list read at most to find its best ones past the labels
+# of the counter, and rows asked of the database at a time.
+POOL_SCAN = 20_000
+POOL_FETCH = 128
 POOL_LIVE = 60
 POOL_BARCODES = 40
 # Reference foods: all those matching are ordered, up to this many, beyond
@@ -182,6 +189,59 @@ def _within(
         return None
     finally:
         connection.set_progress_handler(None, 0)
+
+
+def _best_within(
+    connection: sqlite3.Connection,
+    sql: str,
+    parameters: tuple,
+    deadline: float,
+    count: int,
+    is_label: Callable[[int], bool],
+) -> tuple[list[int], list[int]]:
+    """Read the best rows of a ranked query, past the labels of the counter.
+
+    The rows are read as the index gives them, best first, and the reading
+    stops as soon as enough are kept: the labels met on the way cost a row
+    each, not a query.
+
+    Args:
+        connection: A connection to the main database.
+        sql: The query, ordered by rank.
+        parameters: Its parameters.
+        deadline: Time, on the monotonic clock, after which it is stopped.
+        count: How many rows to keep.
+        is_label: Tells whether an internal number is that of a product with
+            a 13-digit in-store barcode.
+
+    Returns:
+        The rows kept, best first, and the labels met before the reading
+        stopped, best first too. Both are empty when the time was spent.
+    """
+    kept: list[int] = []
+    labels: list[int] = []
+    if time.monotonic() > deadline:
+        return kept, labels
+    connection.set_progress_handler(lambda: time.monotonic() > deadline, PROGRESS_STEPS)
+    cursor = None
+    try:
+        cursor = connection.execute(sql, parameters)
+        while len(kept) < count:
+            rows = cursor.fetchmany(POOL_FETCH)
+            if not rows:
+                break
+            for row in rows:
+                if is_label(row[0]):
+                    labels.append(row[0])
+                elif len(kept) < count:
+                    kept.append(row[0])
+    except sqlite3.OperationalError:
+        pass
+    finally:
+        if cursor is not None:
+            cursor.close()
+        connection.set_progress_handler(None, 0)
+    return kept, labels
 
 
 @dataclass
@@ -325,10 +385,10 @@ def _index_matches(
 
     Returns:
         Internal numbers of foods: the best foods without barcode and, when
-        the text is long enough, the best of everything that has no in-store
-        barcode; each list first among the foods of the country; then, when
-        those did not fill their list, a few of those that have one. What
-        the time did not allow is missing.
+        the text is long enough, the best of everything that is not a label
+        of the counter (a 13-digit in-store barcode); each list first among
+        the foods of the country; then, when those did not fill their list,
+        the best of the labels. What the time did not allow is missing.
     """
     match = match_expression(query)
     if not match:
@@ -336,7 +396,7 @@ def _index_matches(
     generation = context.generation
     everything = not query.short and not generic_only
     in_store = generation.in_store_blocks
-    bounds = tuple(bound for block in in_store for bound in block)
+    ranked_anyway = generation.in_store_ranked
     plain = "SELECT rowid FROM foods_fts WHERE foods_fts MATCH ? {where} ORDER BY rank LIMIT ?"
     local = (
         "SELECT m.rowid FROM foods_fts AS m"
@@ -369,9 +429,13 @@ def _index_matches(
         """Run one search, unless the time is spent."""
         return [row[0] for row in _within(context.base, sql, parameters, deadline) or ()]
 
-    def not_in_store(column: str) -> str:
-        """Write the condition leaving the blocks of in-store barcodes out."""
-        return " ".join(f"AND NOT ({column} BETWEEN ? AND ?)" for _ in in_store)
+    def is_label(pk: int) -> bool:
+        """Tell whether a product has a 13-digit in-store barcode."""
+        return any(low <= pk <= high for low, high in in_store) and pk not in ranked_anyway
+
+    def best(sql: str, parameters: tuple) -> tuple[list[int], list[int]]:
+        """Run one search of everything: its best rows, and the labels met."""
+        return _best_within(context.base, sql, parameters, deadline, POOL_ALL, is_label)
 
     found: list[int] = []
     of_the_country = generation.reference_by_country.get(country or "", frozenset())
@@ -392,26 +456,20 @@ def _index_matches(
         found += run(plain.format(where=where), (match, bound, POOL_GENERIC))
     if everything:
         others: list[int] | None = None
+        labels: list[int] = []
         if country:
-            sql = local.format(where=not_in_store("m.rowid"))
-            others = run(sql, (country, match, *bounds, POOL_ALL))
+            others, labels = best(local.format(where=""), (country, match, POOL_SCAN))
             found += others
         # A country with that many matches of its own fills every page a
         # person will read: ranking the products of the rest of the world as
         # well would double the time for results nobody reaches.
         if others is None or len(others) < POOL_ALL:
-            others = run(plain.format(where=not_in_store("rowid")), (match, *bounds, POOL_ALL))
+            others, labels = best(plain.format(where=""), (match, POOL_SCAN))
             found += others
-        if in_store and len(others) < POOL_ALL:
-            # Fewer other products match than a list holds, so those with an
-            # in-store barcode have their place after them: the first ones
-            # the index finds will do, ranking them would cost for nothing.
-            rows = run(
-                "SELECT rowid FROM foods_fts WHERE foods_fts MATCH ? LIMIT ?",
-                (match, len(others) + POOL_IN_STORE),
-            )
-            kept = [pk for pk in rows if any(low <= pk <= high for low, high in in_store)]
-            found += kept[:POOL_IN_STORE]
+        if len(others) < POOL_ALL:
+            # Fewer other products match than a list holds, so the labels of
+            # the counter have their place after them.
+            found += labels[:POOL_IN_STORE]
     elif not ranges:
         # The products do not occupy one range in this file: take the first
         # matches as they come, which costs nothing, rather than rank them all.
@@ -500,7 +558,7 @@ def _order(
     return (
         typed_barcode,
         1,
-        1 if is_in_store(food.barcode) else 0,
+        1 if is_in_store_label(food.barcode) else 0,
         0 if country and country in served["countries"] else 1,
         best,
         0 if food.kind == KIND_GENERIC else 1,

@@ -601,9 +601,10 @@ of the request, a name that is or begins with the text typed ("Pomme, chair
 et peau, crue" for "pomme", before "Pomme de terre" and long before "Compote
 de pomme"), the table of the country, then raw and fresh forms before cooked
 ones, and dried, canned or pre-packed ones last. Products are ordered by
-country, name and number of scans; the numbers shops put on what they weigh
-and pack themselves (`in_store_barcode`, one food in ten) come after every
-other product, and are found by barcode as before. Without `kind`, the
+country, name and number of scans; the 13-digit numbers shops put on what
+they weigh and pack themselves (most of the `in_store_barcode`, one food in
+ten) come after every other product, and are found by barcode as before;
+the 8-digit ones, own brands of a few retailers, rank like any product. Without `kind`, the
 generic foods whose name is the text typed come first, then the products.
 [`docs/api.md`](docs/api.md#search) has the details.
 
