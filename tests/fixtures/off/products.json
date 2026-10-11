@@ -1,0 +1,125 @@
+[
+  {
+    "code": "3017620422003",
+    "lang": "fr",
+    "names": {"main": "Nutella", "fr": "Nutella", "en": "Nutella hazelnut spread"},
+    "brands": "Nutella, Ferrero",
+    "categories_tags": ["en:breakfasts", "en:spreads", "en:hazelnut-spreads", "en:Pâtes à tartiner", "fr:Nutella"],
+    "food_groups_tags": ["en:sugary-snacks"],
+    "countries_tags": ["en:france", "en:united-kingdom", "en:world"],
+    "product_quantity_unit": "g",
+    "nutrition_data_per": "100g",
+    "last_modified_t": 1791590155,
+    "unique_scans_n": 1064,
+    "creator": "a-contributor-handle",
+    "nutriments": {
+      "energy-kcal": 539, "energy": 2252, "proteins": 6.3, "carbohydrates": 57.5, "sugars": 56.3,
+      "fat": 30.9, "saturated-fat": 10.6, "fiber": 0, "salt": 0.107, "sodium": 0.0428, "alcohol": 0
+    }
+  },
+  {
+    "code": "5449000000996",
+    "lang": "es",
+    "names": {"main": "Coca-Cola Original", "fr": "Coca-Cola", "es": "Coca-Cola Original"},
+    "brands": "Coca-Cola",
+    "categories_tags": ["en:beverages-and-beverages-preparations", "en:beverages", "en:sodas", "en:colas"],
+    "food_groups_tags": ["en:beverages", "en:sweetened-beverages"],
+    "countries_tags": ["en:france", "en:switzerland"],
+    "serving_size": "1 portion (330 ml)",
+    "serving_quantity": "330.0",
+    "product_quantity_unit": "ml",
+    "nutrition_data_per": "serving",
+    "last_modified_t": 1791460239,
+    "unique_scans_n": 671,
+    "creator": "another-contributor",
+    "nutriments": {
+      "energy": 180, "energy-kj": 180, "proteins": 0, "carbohydrates": 10.6, "sugars": 10.6,
+      "fat": 0, "saturated-fat": 0, "salt": 0
+    }
+  },
+  {
+    "code": "0049000028911",
+    "lang": "en",
+    "names": {"main": "Cola"},
+    "brands": "Cola Classic",
+    "categories_tags": ["en:beverages", "en:sodas"],
+    "food_groups_tags": ["en:beverages"],
+    "countries_tags": ["en:united-states"],
+    "serving_size": "12 fl oz (355 ml)",
+    "serving_quantity": "355",
+    "last_modified_t": 1700000000,
+    "unique_scans_n": 12,
+    "nutriments": {
+      "energy-kcal": 80, "proteins": 0, "carbohydrates": 20, "sugars": 20, "fat": 0
+    }
+  },
+  {
+    "code": "7610000123451",
+    "lang": "de",
+    "names": {"main": "Bircher Müesli"},
+    "brands": "Beispiel",
+    "categories_tags": [],
+    "countries_tags": ["en:switzerland"],
+    "last_modified_t": 1750000000,
+    "nutriments": {
+      "energy-kcal": 50, "proteins": 10, "carbohydrates": 60, "fat": 20
+    }
+  },
+  {
+    "code": "7610000123451",
+    "lang": "de",
+    "names": {"main": "Bircher Müesli (older row of the same code)"},
+    "last_modified_t": 1600000000,
+    "nutriments": {"energy-kcal": 380}
+  },
+  {
+    "code": "20095314",
+    "lang": "de",
+    "names": {"main": "Edel-Zartbitter-Schokolade", "de": "Edel-Zartbitter-Schokolade"},
+    "categories_tags": ["en:snacks", "en:dark-chocolates"],
+    "countries_tags": ["en:germany-not-in-the-taxonomy"],
+    "product_quantity_unit": "g",
+    "last_modified_t": 1760000000,
+    "nutriments": {
+      "energy-kcal": 552, "proteins": 7.5, "carbohydrates": 45, "sugars": 40, "fat": 37, "saturated-fat": 23
+    }
+  },
+  {
+    "code": "3560070000012",
+    "lang": "fr",
+    "names": {"main": "Vin rouge", "fr": "Vin rouge"},
+    "categories_tags": ["en:beverages", "en:alcoholic-beverages", "en:wines"],
+    "product_quantity_unit": "ml",
+    "last_modified_t": 1760000000,
+    "obsolete": true,
+    "nutriments": {
+      "energy-kcal": 82, "proteins": 0.1, "carbohydrates": 2.6, "fat": 0, "alcohol": 12.5
+    }
+  },
+  {
+    "code": "853784259806586",
+    "lang": "en",
+    "names": {"main": "Burger King, Whopper Sandwich", "en": "Burger King, Whopper Sandwich"},
+    "brands": "Burger King",
+    "categories_tags": ["en:sandwiches"],
+    "countries_tags": ["en:united-states"],
+    "last_modified_t": 1500000000,
+    "nutriments": {
+      "energy-kcal": 233, "proteins": 10.4, "carbohydrates": 18.1, "fat": 13.3
+    }
+  },
+  {
+    "code": "4006381333931",
+    "lang": "de",
+    "names": {},
+    "last_modified_t": 1760000000,
+    "nutriments": {"energy-kcal": 100}
+  },
+  {
+    "code": "4000000000013",
+    "lang": "de",
+    "names": {"main": "Produkt ohne Nährwerte"},
+    "last_modified_t": 1760000000,
+    "nutriments": {}
+  }
+]

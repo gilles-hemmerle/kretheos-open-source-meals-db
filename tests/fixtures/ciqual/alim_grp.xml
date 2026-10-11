@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<TABLE>
+   <ALIM_GRP>
+      <alim_grp_code> 02 </alim_grp_code>
+      <alim_grp_nom_fr> fruits, légumes, légumineuses et oléagineux </alim_grp_nom_fr>
+      <alim_grp_nom_eng> fruits, vegetables, legumes and nuts </alim_grp_nom_eng>
+      <alim_ssgrp_code> 0202 </alim_ssgrp_code>
+      <alim_ssgrp_nom_fr> fruits </alim_ssgrp_nom_fr>
+      <alim_ssgrp_nom_eng> fruits </alim_ssgrp_nom_eng>
+      <alim_ssssgrp_code> 020201 </alim_ssssgrp_code>
+      <alim_ssssgrp_nom_fr> fruits crus </alim_ssssgrp_nom_fr>
+      <alim_ssssgrp_nom_eng> fruits, raw </alim_ssssgrp_nom_eng>
+   </ALIM_GRP>
+   <ALIM_GRP>
+      <alim_grp_code> 06 </alim_grp_code>
+      <alim_grp_nom_fr> boissons </alim_grp_nom_fr>
+      <alim_grp_nom_eng> beverages </alim_grp_nom_eng>
+      <alim_ssgrp_code> 0602 </alim_ssgrp_code>
+      <alim_ssgrp_nom_fr> boissons sans alcool </alim_ssgrp_nom_fr>
+      <alim_ssgrp_nom_eng> non-alcoholic beverages </alim_ssgrp_nom_eng>
+      <alim_ssssgrp_code> 060201 </alim_ssssgrp_code>
+      <alim_ssssgrp_nom_fr> jus </alim_ssssgrp_nom_fr>
+      <alim_ssssgrp_nom_eng> juices </alim_ssssgrp_nom_eng>
+   </ALIM_GRP>
+   <ALIM_GRP>
+      <alim_grp_code> 01 </alim_grp_code>
+      <alim_grp_nom_fr> entrées et plats composés </alim_grp_nom_fr>
+      <alim_grp_nom_eng> starters and dishes </alim_grp_nom_eng>
+      <alim_ssgrp_code> 0104 </alim_ssgrp_code>
+      <alim_ssgrp_nom_fr> sandwichs </alim_ssgrp_nom_fr>
+      <alim_ssgrp_nom_eng> sandwiches </alim_ssgrp_nom_eng>
+      <alim_ssssgrp_code> 000000 </alim_ssssgrp_code>
+      <alim_ssssgrp_nom_fr> - </alim_ssssgrp_nom_fr>
+      <alim_ssssgrp_nom_eng> - </alim_ssssgrp_nom_eng>
+   </ALIM_GRP>
+</TABLE>

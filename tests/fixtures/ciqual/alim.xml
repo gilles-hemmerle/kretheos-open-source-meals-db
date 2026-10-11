@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<TABLE>
+   <ALIM>
+      <alim_code> 13000 </alim_code>
+      <alim_nom_fr> Abricot, dénoyauté, cru </alim_nom_fr>
+      <alim_nom_eng> Apricot, pitted, raw </alim_nom_eng>
+      <alim_grp_code> 02 </alim_grp_code>
+      <alim_ssgrp_code> 0202 </alim_ssgrp_code>
+      <alim_ssssgrp_code> 020201 </alim_ssssgrp_code>
+   </ALIM>
+   <ALIM>
+      <alim_code> 2069 </alim_code>
+      <alim_nom_fr> Jus de pomme, pur jus </alim_nom_fr>
+      <alim_nom_eng> Apple juice, pure juice </alim_nom_eng>
+      <alim_grp_code> 06 </alim_grp_code>
+      <alim_ssgrp_code> 0602 </alim_ssgrp_code>
+      <alim_ssssgrp_code> 060201 </alim_ssssgrp_code>
+   </ALIM>
+   <ALIM>
+      <alim_code> 25999 </alim_code>
+      <alim_nom_fr> Hamburger, provenant de fast food </alim_nom_fr>
+      <alim_nom_eng> Hamburger, from fast foods restaurant </alim_nom_eng>
+      <alim_grp_code> 01 </alim_grp_code>
+      <alim_ssgrp_code> 0104 </alim_ssgrp_code>
+      <alim_ssssgrp_code> 000000 </alim_ssssgrp_code>
+   </ALIM>
+   <ALIM>
+      <alim_code> 99999 </alim_code>
+      <alim_nom_fr> Aliment sans énergie </alim_nom_fr>
+      <alim_nom_eng> Food without energy </alim_nom_eng>
+      <alim_grp_code> 10 </alim_grp_code>
+      <alim_ssgrp_code> 1001 </alim_ssgrp_code>
+      <alim_ssssgrp_code> 000000 </alim_ssssgrp_code>
+   </ALIM>
+</TABLE>

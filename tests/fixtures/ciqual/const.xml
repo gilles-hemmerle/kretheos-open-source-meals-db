@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<TABLE>
+   <CONST>
+      <const_code> 328 </const_code>
+      <const_nom_fr> Energie, Règlement UE N° 1169/2011 (kcal/100 g) </const_nom_fr>
+      <const_nom_eng> Energy, Regulation EU No 1169/2011 (kcal/100g) </const_nom_eng>
+   </CONST>
+</TABLE>

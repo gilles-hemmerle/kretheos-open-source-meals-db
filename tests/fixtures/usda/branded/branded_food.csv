@@ -1,0 +1,7 @@
+"fdc_id","brand_owner","brand_name","subbrand_name","gtin_upc","ingredients","not_a_significant_source_of","serving_size","serving_size_unit","household_serving_fulltext","branded_food_category","data_source","package_weight","modified_date","available_date","market_country","discontinued_date","preparation_state_code","trade_channel","short_description"
+"4001","The Cola Company","","","00049000028911","CARBONATED WATER","","355.0","MLT","1 Can","Soda","GDSN","","2019-12-01","2020-01-01","United States","","","",""
+"4002","The Cola Company","Cola Classic","","049000028911","CARBONATED WATER","","355.0","ml","1 Can","Soda","GDSN","","2025-08-28","2025-09-18","United States","","","",""
+"4003","Spread Makers Inc.","","","3017620422003","SUGAR, PALM OIL","","37.0","g","2 Tbsp (37 g)","Chocolate","LI","","2023-02-01","2023-03-01","United States","","","",""
+"4004","Snack Co","","","NIELSENUK0002","CORN","","","","","Chips, Pretzels & Snacks","LI","","2020-12-01","2021-01-01","United States","","","",""
+"4005","Snack Co","","","NIELSENUK0002","CORN","","","","","Chips, Pretzels & Snacks","LI","","2021-12-01","2022-01-01","United States","2023-06-01","","",""
+"4006","Kiwi Drinks Ltd","Kiwi Fresh","","9400547001910","KIWIFRUIT JUICE","","250.0","ml","1 cup","Fruit & Vegetable Juice, Nectars & Fruit Drinks","NZGDSN","","2024-05-01","2024-05-05","New Zealand","","","",""

@@ -1,0 +1,8 @@
+{
+  "en:france": {"name": {"en": "France"}, "country_code_2": {"en": "FR"}},
+  "en:switzerland": {"name": {"en": "Switzerland"}, "country_code_2": {"en": "CH"}},
+  "en:united-kingdom": {"name": {"en": "United Kingdom"}, "country_code_2": {"en": "UK"}},
+  "en:united-states": {"name": {"en": "United States"}, "country_code_2": {"en": "US"}},
+  "en:world": {"name": {"en": "World"}, "country_code_2": {"en": "world"}},
+  "en:european-union": {"name": {"en": "European Union"}}
+}
