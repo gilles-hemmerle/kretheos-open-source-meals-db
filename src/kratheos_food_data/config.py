@@ -22,8 +22,12 @@ REQUIRED_WHEN_ENABLED = (
     "terms_quote",
     "terms_checked",
     "attribution",
+    "mirror",
 )
 KINDS = {"generic", "product"}
+MIRROR_GIT = "git"
+MIRROR_RELEASE = "release"
+MIRROR_KINDS = {MIRROR_GIT, MIRROR_RELEASE}
 
 
 class ConfigError(ValueError):
@@ -71,6 +75,8 @@ class Source:
         share_alike: Whether derived databases must keep the licence.
         enabled: Whether the build uses the source.
         reason: Why it is disabled.
+        mirror: Where its files are stored: git or release.
+        country: Country whose foods its generic table describes, if any.
         files: Files to download.
     """
 
@@ -93,6 +99,8 @@ class Source:
     share_alike: bool
     enabled: bool
     reason: str
+    mirror: str
+    country: str
     files: tuple[SourceFile, ...]
 
     def file(self, name: str) -> SourceFile:
@@ -158,18 +166,24 @@ def _parse_source(raw: dict) -> Source:
             share_alike=bool(raw.get("share_alike", False)),
             enabled=bool(raw["enabled"]),
             reason=raw.get("reason", ""),
+            mirror=raw.get("mirror", ""),
+            country=str(raw.get("country", "")).upper(),
             files=files,
         )
     except KeyError as error:
         raise ConfigError(f"source {source_id}: missing field {error}") from error
     if not set(source.kinds) <= KINDS or not source.kinds:
         raise ConfigError(f"source {source_id}: kinds must be among {sorted(KINDS)}")
+    if source.country and not (len(source.country) == 2 and source.country.isalpha()):
+        raise ConfigError(f"source {source_id}: country must be an ISO 3166-1 alpha-2 code")
     if source.enabled:
         missing = [name for name in REQUIRED_WHEN_ENABLED if not getattr(source, name)]
         if missing:
             raise ConfigError(f"source {source_id} is enabled but lacks: {', '.join(missing)}")
         if not source.files:
             raise ConfigError(f"source {source_id} is enabled but lists no file")
+        if source.mirror not in MIRROR_KINDS:
+            raise ConfigError(f"source {source_id}: mirror must be among {sorted(MIRROR_KINDS)}")
     elif not source.reason:
         raise ConfigError(f"source {source_id} is disabled without a reason")
     return source

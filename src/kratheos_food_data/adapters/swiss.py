@@ -9,6 +9,9 @@ Each workbook has a sheet of generic foods and a small sheet of branded foods
 (mineral waters, a few spirits). Branded foods have no barcode; they are
 staged as products without one.
 
+Carbohydrate is "Carbohydrates, available": dietary fibre is a column of its
+own and is not included.
+
 Cells hold numbers, `n.d.` (no data), `tr.` (traces, kept as 0) or `<x`
 (below a limit, kept as x); the last two make the record `inexact_values`.
 
@@ -144,9 +147,7 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
     Raises:
         ValueError: When the layout of a workbook is not the expected one.
     """
-    sheets = {
-        lang: read_sheets(context.download_dir / name) for lang, name in LANGUAGE_FILES.items()
-    }
+    sheets = {lang: read_sheets(context.file(name)) for lang, name in LANGUAGE_FILES.items()}
     version = released = None
     title = clean_text(sheets["en"][0][TITLE_ROW][0]) or ""
     match = VERSION_PATTERN.search(title)
@@ -199,6 +200,8 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
                 "category": category,
                 "basis": schema.BASIS_100ML if "ml" in unit else schema.BASIS_100G,
                 "basis_assumed": not unit,
+                "carbohydrate_includes_fiber": False,
+                "countries": [source.country] if source.country else None,
                 "is_drink": is_drink(category),
                 "source_url": SEARCH_URL + quote(names.get("en", ""), safe="") if names else None,
                 "updated_at": updated_at,

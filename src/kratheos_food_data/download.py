@@ -367,6 +367,17 @@ def read_record(dest: Path) -> FileRecord | None:
         return None
 
 
+def write_record(dest: Path, record: FileRecord) -> None:
+    """Write the sidecar that describes a downloaded file.
+
+    Args:
+        dest: Path of the downloaded file.
+        record: Its description; the status is not stored.
+    """
+    stored_fields = {key: value for key, value in asdict(record).items() if key != "status"}
+    meta_path(dest).write_text(json.dumps(stored_fields, indent=2) + "\n", encoding="utf-8")
+
+
 def hash_file(path: Path) -> tuple[str, str]:
     """Compute the SHA-256 and MD5 of a file in one pass.
 
@@ -536,6 +547,7 @@ def fetch(
     expected_md5: str | None = None,
     offline: bool = False,
     force: bool = False,
+    on_size: Callable[[int], None] | None = None,
     log: Logger = print,
 ) -> FileRecord:
     """Make sure a remote file is present locally, complete and verified.
@@ -547,6 +559,9 @@ def fetch(
         expected_md5: MD5 pinned in the source list, if any.
         offline: Never touch the network; fail if the file is not there.
         force: Download again even when the local copy looks current.
+        on_size: Called with the number of bytes about to be downloaded,
+            before the download starts; it may raise to refuse it (the
+            build uses it to protect the free disk space).
         log: Function receiving progress lines.
 
     Returns:
@@ -587,6 +602,8 @@ def fetch(
         if force or not same or (remote.size is not None and part.stat().st_size > remote.size):
             part.unlink()
     part_meta.write_text(json.dumps({"url": url, "validator": validator}), encoding="utf-8")
+    if on_size is not None and remote.size is not None:
+        on_size(max(remote.size - (part.stat().st_size if part.exists() else 0), 0))
 
     resumed_any = False
     for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -645,6 +662,5 @@ def fetch(
         downloaded_at=datetime.now(UTC).isoformat(timespec="seconds"),
         status="resumed" if resumed_any else "downloaded",
     )
-    stored_fields = {key: value for key, value in asdict(record).items() if key != "status"}
-    meta_path(dest).write_text(json.dumps(stored_fields, indent=2) + "\n", encoding="utf-8")
+    write_record(dest, record)
     return record

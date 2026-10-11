@@ -33,17 +33,35 @@ class AdapterContext:
 
     Attributes:
         con: DuckDB connection, with the barcode macros registered.
-        download_dir: Directory holding the downloaded files of the source.
+        files: Path of each file of the source, by the name it is declared
+            under in the source list. The files are the stored originals (or
+            an override for this run): an adapter reads them, never writes.
         work_dir: Scratch directory of the source (extracted archives).
         staging_path: Parquet file the adapter must write.
         log: Function receiving progress lines.
     """
 
     con: duckdb.DuckDBPyConnection
-    download_dir: Path
+    files: dict[str, Path]
     work_dir: Path
     staging_path: Path
     log: Logger = print
+
+    def file(self, name: str) -> Path:
+        """Return the path of a file of the source.
+
+        Args:
+            name: File name as declared in the source list.
+
+        Returns:
+            Where the file is for this run.
+
+        Raises:
+            KeyError: When the source declares no such file.
+        """
+        if name not in self.files:
+            raise KeyError(f"the source has no file named {name}")
+        return self.files[name]
 
 
 @dataclass
@@ -79,8 +97,9 @@ def extract_members(archive: Path, wanted: Iterable[str], dest: Path) -> dict[st
     """Extract chosen files of a zip archive, by base name.
 
     Only the base name of a member is used to build the destination path, so
-    an archive cannot write outside `dest`. A member already extracted with
-    the right size is not extracted again.
+    an archive cannot write outside `dest`. A member is not extracted again
+    when the copy on disk has the size and the CRC the archive announces; the
+    CRC of each extracted member is remembered in a small stamp file.
 
     Args:
         archive: The zip file.
@@ -94,6 +113,11 @@ def extract_members(archive: Path, wanted: Iterable[str], dest: Path) -> dict[st
         FileNotFoundError: When a wanted member is not in the archive.
     """
     dest.mkdir(parents=True, exist_ok=True)
+    stamp_path = dest / ".extracted.json"
+    try:
+        stamp = json.loads(stamp_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        stamp = {}
     wanted_set = set(wanted)
     found: dict[str, Path] = {}
     with zipfile.ZipFile(archive) as bundle:
@@ -102,11 +126,18 @@ def extract_members(archive: Path, wanted: Iterable[str], dest: Path) -> dict[st
             if info.is_dir() or base not in wanted_set or base in found:
                 continue
             target = dest / base
-            if not target.exists() or target.stat().st_size != info.file_size:
+            current = (
+                target.exists()
+                and target.stat().st_size == info.file_size
+                and stamp.get(base) == info.CRC
+            )
+            if not current:
                 partial = dest / (base + ".part")
                 with bundle.open(info) as source, partial.open("wb") as out:
                     shutil.copyfileobj(source, out, 4 * 1024 * 1024)
                 partial.replace(target)
+                stamp[base] = info.CRC
+                stamp_path.write_text(json.dumps(stamp, sort_keys=True), encoding="utf-8")
             found[base] = target
     missing = wanted_set - set(found)
     if missing:

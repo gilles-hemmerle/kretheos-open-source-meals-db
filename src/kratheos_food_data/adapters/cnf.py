@@ -6,7 +6,9 @@ food and nutrient, per 100 g of edible portion) and `CNF_Food_Group.csv`.
 Nutrients are identified by the legacy USDA nutrient numbers (208 = energy in
 kcal, 203 = protein...), a good part of the file being derived from USDA data.
 
-Carbohydrate is "total, by difference", so it includes fibre.
+Carbohydrate is "total (by difference)" (nutrient 205, INFOODS tag CHOCDF): it
+includes dietary fibre. The adapter says so and the normalisation subtracts
+the fibre.
 """
 
 from __future__ import annotations
@@ -33,11 +35,12 @@ NUTRIENT_CODES = {
 }
 
 
-def staging_sql(files: dict) -> str:
+def staging_sql(files: dict, country: str) -> str:
     """Build the staging SELECT of the Canadian Nutrient File.
 
     Args:
         files: Extracted CSV files, by base name.
+        country: Country whose foods the file describes.
 
     Returns:
         The SQL SELECT.
@@ -96,6 +99,7 @@ def staging_sql(files: dict) -> str:
             n.kj AS energy_kj,
             n.protein AS protein_g,
             n.carbohydrate AS carbohydrate_g,
+            TRUE AS carbohydrate_includes_fiber,
             n.sugars AS sugars_g,
             n.fat AS fat_g,
             n.saturated AS saturated_fat_g,
@@ -110,7 +114,7 @@ def staging_sql(files: dict) -> str:
             NULL AS serving_text,
             CASE WHEN g.CNF_Food_Group_Description_EN IS NULL THEN NULL
                  ELSE g.CNF_Food_Group_Description_EN = '{BEVERAGE_GROUP}' END AS is_drink,
-            NULL AS countries,
+            ['{country}'] AS countries,
             '{FOOD_URL}' || f.Food_Code AS source_url,
             try_cast(f.Food_Last_Updated_Date AS DATE) AS updated_at,
             NULL AS popularity,
@@ -133,11 +137,11 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
     Returns:
         The row counts.
     """
-    archive = context.download_dir / source.files[0].name
+    archive = context.file(source.files[0].name)
     files = extract_members(
         archive,
         ["Food_Name.csv", "Nutrient_Amount.csv", "CNF_Food_Group.csv"],
         context.work_dir,
     )
-    written = write_staging_query(context, staging_sql(files))
+    written = write_staging_query(context, staging_sql(files, source.country))
     return AdapterResult(stats={"rows_in_source": written, "rows_staged": written})

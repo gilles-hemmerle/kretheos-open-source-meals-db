@@ -1,0 +1,417 @@
+"""The Kratheos layer: what Kratheos and its users add on top of the sources.
+
+The sources are stored untouched. Everything that comes from Kratheos lives
+in one small SQLite file, `kratheos.sqlite`, committed at the root of the
+repository, and is applied by the build after the sources are aggregated:
+
+* `products`: foods added in Kratheos, with or without a barcode (a
+  restaurant item has none). They become records of the source `kratheos`;
+* `corrections`: corrected values for a record of any source. The corrected
+  values are what the main database shows; the source's own values stay
+  available, with their source;
+* `confirmations`: how many people confirmed the values of a record;
+* `translations`: names Kratheos adds to a record in a language its source
+  does not give. A translation never replaces a name given by the source;
+* `meta`: version of this layout and date of the last export from Kratheos.
+
+Never who: the file holds no account, no handle and no identifier of a
+person. The layout below is closed: the build refuses a file with a table or
+a column that is not listed here, so nothing of the kind can slip in.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import duckdb
+
+from . import schema
+from .config import MIRROR_GIT, Source
+
+SCHEMA_VERSION = 1
+SOURCE_ID = "kratheos"
+FILE_NAME = "kratheos.sqlite"
+TRANSLATION_ORIGINS = ("machine", "human")
+
+VALUE_COLUMNS = (
+    ("brand", "TEXT"),
+    ("category", "TEXT"),
+    ("basis", "TEXT"),
+    ("energy_kcal", "REAL"),
+    ("protein_g", "REAL"),
+    ("carbohydrate_g", "REAL"),
+    ("sugars_g", "REAL"),
+    ("fat_g", "REAL"),
+    ("saturated_fat_g", "REAL"),
+    ("fiber_g", "REAL"),
+    ("salt_g", "REAL"),
+    ("alcohol_g", "REAL"),
+    ("serving_size", "REAL"),
+    ("serving_unit", "TEXT"),
+    ("serving_text", "TEXT"),
+    ("is_drink", "INTEGER"),
+)
+
+# Table -> ordered (column, declared type). This is the whole layout.
+TABLES: dict[str, tuple[tuple[str, str], ...]] = {
+    "meta": (("key", "TEXT"), ("value", "TEXT")),
+    "translations": (
+        ("record_id", "TEXT"),
+        ("lang", "TEXT"),
+        ("name", "TEXT"),
+        ("origin", "TEXT"),
+        ("updated_at", "TEXT"),
+    ),
+    "products": (
+        ("id", "TEXT"),
+        ("kind", "TEXT"),
+        ("barcode", "TEXT"),
+        ("name", "TEXT"),
+        ("name_lang", "TEXT"),
+        ("names", "TEXT"),
+        *VALUE_COLUMNS,
+        ("countries", "TEXT"),
+        ("updated_at", "TEXT"),
+    ),
+    "corrections": (
+        ("record_id", "TEXT"),
+        ("names", "TEXT"),
+        *VALUE_COLUMNS,
+        ("updated_at", "TEXT"),
+    ),
+    "confirmations": (
+        ("record_id", "TEXT"),
+        ("confirmations", "INTEGER"),
+        ("updated_at", "TEXT"),
+    ),
+}
+
+_VALUE_DDL = ",\n    ".join(f"{name} {kind}" for name, kind in VALUE_COLUMNS)
+
+DDL = f"""
+CREATE TABLE meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+) WITHOUT ROWID;
+
+-- A name Kratheos adds to a record, in a language its source does not give.
+CREATE TABLE translations (
+    record_id TEXT NOT NULL,   -- id of a record of any source, e.g. ciqual:13000
+    lang TEXT NOT NULL,        -- language code of the name
+    name TEXT NOT NULL,
+    origin TEXT NOT NULL CHECK (origin IN ('machine', 'human')),
+    updated_at TEXT NOT NULL,  -- ISO 8601 date
+    PRIMARY KEY (record_id, lang)
+) WITHOUT ROWID;
+
+-- A food added in Kratheos. Its record id is kratheos:<id>. Values are per
+-- 100 g or 100 ml (basis); carbohydrate_g is available carbohydrate, fibre
+-- excluded, as on European labels.
+CREATE TABLE products (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'product' CHECK (kind IN ('generic', 'product')),
+    barcode TEXT,              -- optional; a restaurant item has none
+    name TEXT NOT NULL,
+    name_lang TEXT NOT NULL,   -- language code of name
+    names TEXT,                -- JSON object: other names by language code
+    {_VALUE_DDL},
+    countries TEXT,            -- JSON array of ISO 3166-1 alpha-2 codes, given at creation
+    updated_at TEXT NOT NULL,
+    CHECK (basis IN ('100g', '100ml'))
+) WITHOUT ROWID;
+
+-- Corrected values for a record of a source. NULL means "not corrected".
+CREATE TABLE corrections (
+    record_id TEXT PRIMARY KEY,
+    names TEXT,                -- JSON object: corrected names by language code
+    {_VALUE_DDL},
+    updated_at TEXT NOT NULL,
+    CHECK (basis IS NULL OR basis IN ('100g', '100ml'))
+) WITHOUT ROWID;
+
+-- How many people confirmed the values of a record. Never who.
+CREATE TABLE confirmations (
+    record_id TEXT PRIMARY KEY,
+    confirmations INTEGER NOT NULL CHECK (confirmations >= 0),
+    updated_at TEXT NOT NULL
+) WITHOUT ROWID;
+"""
+
+KRATHEOS_SOURCE = Source(
+    id=SOURCE_ID,
+    name="Kratheos",
+    publisher="Kratheos and its users",
+    homepage="",
+    adapter="",
+    version="",
+    released="",
+    kinds=(schema.KIND_GENERIC, schema.KIND_PRODUCT),
+    priority=1000,
+    licence="ODbL-1.0",
+    licence_name="Open Database License 1.0",
+    licence_url="https://opendatacommons.org/licenses/odbl/1-0/",
+    terms_url="",
+    terms_quote="",
+    terms_checked="",
+    attribution="Contains data added by the users of Kratheos, available under the"
+    " Open Database License (ODbL) 1.0.",
+    share_alike=True,
+    enabled=True,
+    reason="",
+    mirror=MIRROR_GIT,
+    country="",
+    files=(),
+)
+
+
+class LayerError(ValueError):
+    """`kratheos.sqlite` does not have the documented layout."""
+
+
+@dataclass
+class Layer:
+    """The content of `kratheos.sqlite`.
+
+    Attributes:
+        meta: The key and value pairs of the `meta` table.
+        products: Rows of `products`, as dictionaries.
+        corrections: Rows of `corrections`, as dictionaries.
+        confirmations: Rows of `confirmations`, as dictionaries.
+        translations: Rows of `translations`, as dictionaries.
+    """
+
+    meta: dict[str, str] = field(default_factory=dict)
+    products: list[dict] = field(default_factory=list)
+    corrections: list[dict] = field(default_factory=list)
+    confirmations: list[dict] = field(default_factory=list)
+    translations: list[dict] = field(default_factory=list)
+
+
+def create_database(path: Path) -> None:
+    """Create an empty `kratheos.sqlite` with the documented layout.
+
+    Args:
+        path: Where to create the file.
+
+    Raises:
+        FileExistsError: When a file is already there; it is never replaced.
+    """
+    if path.exists():
+        raise FileExistsError(f"{path} already exists")
+    connection = sqlite3.connect(path)
+    try:
+        connection.executescript(DDL)
+        connection.executemany(
+            "INSERT INTO meta (key, value) VALUES (?, ?)",
+            [("schema_version", str(SCHEMA_VERSION)), ("exported_at", "")],
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def check_layout(connection: sqlite3.Connection) -> None:
+    """Verify that a database has exactly the documented tables and columns.
+
+    Args:
+        connection: A connection to a `kratheos.sqlite` file.
+
+    Raises:
+        LayerError: When a table or a column is missing or unexpected, or
+            when the layout version is not the one this code reads.
+    """
+    tables = {
+        name
+        for (name,) in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        )
+    }
+    if tables != set(TABLES):
+        unexpected = sorted(tables - set(TABLES))
+        missing = sorted(set(TABLES) - tables)
+        raise LayerError(f"unexpected tables {unexpected}, missing tables {missing}")
+    for table, columns in TABLES.items():
+        found = [row[1] for row in connection.execute(f"PRAGMA table_info({table})")]
+        expected = [name for name, _ in columns]
+        if found != expected:
+            raise LayerError(f"table {table} has columns {found}, expected {expected}")
+    version = connection.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+    if version is None or version[0] != str(SCHEMA_VERSION):
+        raise LayerError(f"schema_version is {version and version[0]}, expected {SCHEMA_VERSION}")
+
+
+def read_layer(path: Path) -> Layer:
+    """Read `kratheos.sqlite`, after checking its layout.
+
+    The file is opened read-only: the build never writes to it.
+
+    Args:
+        path: Path of the file.
+
+    Returns:
+        The content of the layer; an empty layer when the file is missing.
+
+    Raises:
+        LayerError: When the file does not have the documented layout.
+    """
+    if not path.exists():
+        return Layer()
+    connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        check_layout(connection)
+        connection.row_factory = sqlite3.Row
+        layer = Layer(meta=dict(connection.execute("SELECT key, value FROM meta").fetchall()))
+        for table in ("products", "corrections", "confirmations", "translations"):
+            order = "id" if table == "products" else "record_id"
+            rows = connection.execute(f"SELECT * FROM {table} ORDER BY {order}").fetchall()
+            getattr(layer, table).extend(dict(row) for row in rows)
+        return layer
+    finally:
+        connection.close()
+
+
+def _json_object(text: str | None, what: str) -> dict[str, str]:
+    """Read a JSON object of language code to name.
+
+    Args:
+        text: The JSON text, or None.
+        what: What is being read, for the error message.
+
+    Returns:
+        The names, without empty ones.
+
+    Raises:
+        LayerError: When the text is not a JSON object of strings.
+    """
+    if not text:
+        return {}
+    try:
+        value = json.loads(text)
+    except ValueError as error:
+        raise LayerError(f"{what}: names is not valid JSON") from error
+    if not isinstance(value, dict) or not all(isinstance(name, str) for name in value.values()):
+        raise LayerError(f"{what}: names must be a JSON object of language code to name")
+    return {lang: " ".join(name.split()) for lang, name in value.items() if name.strip()}
+
+
+def product_staging_rows(layer: Layer) -> list[dict]:
+    """Turn the Kratheos products into staging rows, like an adapter does.
+
+    Args:
+        layer: The Kratheos layer.
+
+    Returns:
+        One staging row per product.
+
+    Raises:
+        LayerError: When a product has malformed names or countries.
+    """
+    rows = []
+    for product in layer.products:
+        what = f"product {product['id']}"
+        names = _json_object(product["names"], what)
+        names[product["name_lang"]] = " ".join(product["name"].split())
+        try:
+            countries = json.loads(product["countries"]) if product["countries"] else None
+        except ValueError as error:
+            raise LayerError(f"{what}: countries is not valid JSON") from error
+        is_drink = product["is_drink"]
+        rows.append(
+            {
+                "source_dataset": None,
+                "source_record_id": product["id"],
+                "kind": product["kind"],
+                "barcode_raw": product["barcode"],
+                "names": names,
+                "main_lang": product["name_lang"],
+                "brand": product["brand"],
+                "category": product["category"],
+                "basis": product["basis"],
+                "basis_assumed": False,
+                "energy_kcal": product["energy_kcal"],
+                "protein_g": product["protein_g"],
+                "carbohydrate_g": product["carbohydrate_g"],
+                "carbohydrate_includes_fiber": False,
+                "sugars_g": product["sugars_g"],
+                "fat_g": product["fat_g"],
+                "saturated_fat_g": product["saturated_fat_g"],
+                "fiber_g": product["fiber_g"],
+                "salt_g": product["salt_g"],
+                "alcohol_g": product["alcohol_g"],
+                "serving_size": product["serving_size"],
+                "serving_unit": product["serving_unit"],
+                "serving_text": product["serving_text"],
+                "is_drink": None if is_drink is None else bool(is_drink),
+                "countries": [str(code).upper() for code in countries] if countries else None,
+                "source_url": None,
+                "updated_at": product["updated_at"],
+            }
+        )
+    return rows
+
+
+def load_tables(con: duckdb.DuckDBPyConnection, layer: Layer) -> None:
+    """Load corrections, confirmations and translations into DuckDB tables.
+
+    Creates `kratheos_corrections`, `kratheos_confirmations` and
+    `kratheos_translations`, empty when the layer is.
+
+    Args:
+        con: DuckDB connection of the build.
+        layer: The Kratheos layer.
+
+    Raises:
+        LayerError: When a correction has malformed names.
+    """
+    duck_types = {"TEXT": "VARCHAR", "REAL": "DOUBLE", "INTEGER": "BIGINT"}
+    value_ddl = ", ".join(f"{name} {duck_types[kind]}" for name, kind in VALUE_COLUMNS)
+    con.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE kratheos_corrections (
+            record_id VARCHAR, names MAP(VARCHAR, VARCHAR), {value_ddl}, updated_at DATE
+        )
+        """
+    )
+    value_names = [name for name, _ in VALUE_COLUMNS]
+    placeholders = ", ".join("?" for _ in range(len(value_names) + 3))
+    for correction in layer.corrections:
+        names = _json_object(correction["names"], f"correction of {correction['record_id']}")
+        con.execute(
+            f"""
+            INSERT INTO kratheos_corrections
+            SELECT record_id, CASE WHEN names = '{{}}' THEN NULL
+                              ELSE json_transform(names, '"MAP(VARCHAR, VARCHAR)"') END,
+                   {", ".join(value_names)}, CAST(updated_at AS DATE)
+            FROM (VALUES ({placeholders})) AS v(record_id, names, {", ".join(value_names)},
+                                               updated_at)
+            """,
+            [
+                correction["record_id"],
+                json.dumps(names, ensure_ascii=False),
+                *(correction[name] for name in value_names),
+                correction["updated_at"],
+            ],
+        )
+    con.execute(
+        "CREATE OR REPLACE TEMP TABLE kratheos_confirmations"
+        " (record_id VARCHAR, confirmations BIGINT)"
+    )
+    if layer.confirmations:
+        con.executemany(
+            "INSERT INTO kratheos_confirmations VALUES (?, ?)",
+            [(row["record_id"], row["confirmations"]) for row in layer.confirmations],
+        )
+    con.execute(
+        "CREATE OR REPLACE TEMP TABLE kratheos_translations"
+        " (record_id VARCHAR, lang VARCHAR, name VARCHAR, origin VARCHAR)"
+    )
+    translations = [
+        (row["record_id"], row["lang"], " ".join(row["name"].split()), row["origin"])
+        for row in layer.translations
+        if row["name"].strip()
+    ]
+    if translations:
+        con.executemany("INSERT INTO kratheos_translations VALUES (?, ?, ?, ?)", translations)

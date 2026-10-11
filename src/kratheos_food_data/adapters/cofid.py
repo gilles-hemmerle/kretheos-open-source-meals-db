@@ -7,6 +7,8 @@ saturated fat, alcohol) and sheet `1.4 Inorganics` (sodium). Values are per
 
 Particularities of this source:
 
+* carbohydrate is available carbohydrate (fibre is reported apart, as AOAC
+  fibre or non-starch polysaccharides, and is not part of it);
 * carbohydrate and sugars are expressed as monosaccharide equivalents, about
   5 to 10 % above the weight of the same starch or sucrose, and energy is
   computed with 3.75 kcal per gram of carbohydrate;
@@ -327,6 +329,7 @@ def read_workbook(path: Path) -> tuple[list[dict], int]:
             if (group or "").startswith(ALCOHOLIC_GROUP_PREFIX)
             else schema.BASIS_100G,
             "basis_assumed": False,
+            "carbohydrate_includes_fiber": False,
             "is_drink": is_drink(group),
         }
         inexact = False
@@ -355,9 +358,10 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
     Returns:
         The row counts.
     """
-    rows, repeated = read_workbook(context.download_dir / source.files[0].name)
+    rows, repeated = read_workbook(context.file(source.files[0].name))
     for row in rows:
         row["source_url"] = source.homepage
+        row["countries"] = [source.country] if source.country else None
         row["updated_at"] = source.released or None
     written = write_staging_rows(context, rows)
     return AdapterResult(

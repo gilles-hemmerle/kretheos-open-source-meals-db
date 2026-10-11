@@ -16,6 +16,19 @@ What is never read: any column naming a contributor (`creator`, `editors`,
 Open Food Facts does not record whether a label is per 100 g or per 100 ml.
 The basis is inferred from the unit of the package quantity, then from the
 unit of the serving size; when neither is known, 100 g is assumed and flagged.
+
+Nor does it record what a label means by carbohydrate, and labels differ:
+those of the United States and Canada declare total carbohydrate, fibre
+included, those of Europe available carbohydrate. The export only has a
+separate `carbohydrates-total` value for about 4 000 products. What tells the
+two apart is the country: on the fibre-rich products (5 g or more) of the
+export of 2026-10-10, energy is best explained by a carbohydrate that
+includes fibre for 83 % of the products sold only in the United States and
+85 % of those sold only in Canada, and by available carbohydrate for 77 % of
+those sold only in France and 82 % in Germany. So the carbohydrate of a
+product is taken as including fibre when every country it is sold in is the
+United States or Canada (or when only `carbohydrates-total` is given), and as
+available carbohydrate otherwise.
 """
 
 from __future__ import annotations
@@ -34,7 +47,10 @@ PRODUCT_URL = "https://world.openfoodfacts.org/product/"
 UNKNOWN_LANGUAGE = "und"
 UNDEFINED_CATEGORY = "en:undefined"
 # The taxonomy writes the United Kingdom "UK"; ISO 3166-1 says "GB".
-COUNTRY_CODE_FIXES = {"uk": "gb"}
+COUNTRY_CODE_FIXES = {"UK": "GB"}
+# Countries whose labels declare total carbohydrate, dietary fibre included
+# (United States: 21 CFR 101.9; Canada: Food and Drug Regulations B.01.401).
+TOTAL_CARBOHYDRATE_COUNTRIES = ("US", "CA")
 DRINK_CATEGORIES = ("en:beverages", "en:milks", "en:dairy-drinks")
 DRINK_FOOD_GROUP = "en:beverages"
 SERVING_UNIT_PATTERN = r"[0-9]\s*(ml|cl|dl|l|fl\.? ?oz|mg|kg|g|oz)\b"
@@ -47,6 +63,7 @@ NUTRIENTS = {
     "energy_kj_generic": "energy",
     "protein_g": "proteins",
     "carbohydrate_g": "carbohydrates",
+    "carbohydrate_total_g": "carbohydrates-total",
     "sugars_g": "sugars",
     "fat_g": "fat",
     "saturated_fat_g": "saturated-fat",
@@ -71,13 +88,13 @@ def load_country_codes(context: AdapterContext) -> int:
     Returns:
         The number of country tags loaded.
     """
-    with (context.download_dir / COUNTRIES_NAME).open(encoding="utf-8") as handle:
+    with context.file(COUNTRIES_NAME).open(encoding="utf-8") as handle:
         taxonomy = json.load(handle)
     pairs = []
     for tag, entry in taxonomy.items():
         code = (entry.get("country_code_2") or {}).get("en", "")
         if len(code) == 2 and code.isalpha():
-            pairs.append((tag, COUNTRY_CODE_FIXES.get(code.lower(), code.lower())))
+            pairs.append((tag, COUNTRY_CODE_FIXES.get(code.upper(), code.upper())))
     context.con.execute("CREATE OR REPLACE TEMP TABLE off_countries (tag VARCHAR, iso VARCHAR)")
     context.con.executemany("INSERT INTO off_countries VALUES (?, ?)", pairs)
     return len(pairs)
@@ -224,7 +241,12 @@ SELECT
     slim.energy_kcal AS energy_kcal,
     coalesce(slim.energy_kj_explicit, slim.energy_kj_generic) AS energy_kj,
     slim.protein_g AS protein_g,
-    slim.carbohydrate_g AS carbohydrate_g,
+    coalesce(slim.carbohydrate_g, slim.carbohydrate_total_g) AS carbohydrate_g,
+    (slim.carbohydrate_g IS NULL AND slim.carbohydrate_total_g IS NOT NULL)
+        OR (len(countries.countries) > 0
+            AND len([sold_in FOR sold_in IN countries.countries
+                     IF sold_in NOT IN {TOTAL_CARBOHYDRATE_COUNTRIES}]) = 0)
+        AS carbohydrate_includes_fiber,
     slim.sugars_g AS sugars_g,
     slim.fat_g AS fat_g,
     slim.saturated_fat_g AS saturated_fat_g,
@@ -261,12 +283,25 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
         revision) and the row counts.
     """
     con = context.con
-    parquet = context.download_dir / PARQUET_NAME
+    parquet = context.file(PARQUET_NAME)
     country_tags = load_country_codes(context)
     total = con.execute(f"SELECT count(*) FROM read_parquet({sql_string(parquet)})").fetchone()[0]
     context.log(f"  {total:,} rows in the export; extracting the needed columns")
     con.execute(f"CREATE OR REPLACE TEMP TABLE off_slim AS {slim_sql(str(parquet))}")
     slim_rows, latest = con.execute("SELECT count(*), max(updated_at) FROM off_slim").fetchone()
+    unmapped_uses, unmapped_tags, without_country = con.execute(
+        """
+        SELECT
+            count(*) FILTER (WHERE known.iso IS NULL),
+            count(DISTINCT tags.tag) FILTER (WHERE known.iso IS NULL),
+            (SELECT count(*) FROM off_slim AS s
+             WHERE len(s.countries_tags) > 0 AND NOT EXISTS (
+                 SELECT 1 FROM unnest(s.countries_tags) AS t(tag)
+                 JOIN off_countries AS k ON k.tag = t.tag))
+        FROM off_slim AS slim, unnest(slim.countries_tags) AS tags(tag)
+        LEFT JOIN off_countries AS known ON known.tag = tags.tag
+        """
+    ).fetchone()
     written = write_staging_query(context, STAGING_SQL)
     con.execute("DROP TABLE off_slim")
     con.execute("DROP TABLE off_countries")
@@ -287,5 +322,8 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
             "rows_without_code_or_superseded_duplicates": total - slim_rows,
             "rows_staged": written,
             "country_tags_known": country_tags,
+            "country_tag_uses_not_mapped_to_a_code": unmapped_uses,
+            "distinct_country_tags_not_mapped": unmapped_tags,
+            "products_with_tags_but_no_mapped_country": without_country,
         },
     )

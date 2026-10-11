@@ -51,7 +51,12 @@ STAGING_COLUMNS: tuple[Column, ...] = (
     Column("energy_kcal", "DOUBLE", "Energy in kcal, when the source gives it."),
     Column("energy_kj", "DOUBLE", "Energy in kJ, when the source gives it."),
     Column("protein_g", "DOUBLE", "Protein, g."),
-    Column("carbohydrate_g", "DOUBLE", "Carbohydrate, g."),
+    Column("carbohydrate_g", "DOUBLE", "Carbohydrate as the source gives it, g."),
+    Column(
+        "carbohydrate_includes_fiber",
+        "BOOLEAN",
+        "True when the carbohydrate of the source includes dietary fibre.",
+    ),
     Column("sugars_g", "DOUBLE", "Sugars, g."),
     Column("fat_g", "DOUBLE", "Fat, g."),
     Column("saturated_fat_g", "DOUBLE", "Saturated fat, g."),
@@ -65,7 +70,7 @@ STAGING_COLUMNS: tuple[Column, ...] = (
     Column("serving_unit", "VARCHAR", "g or ml."),
     Column("serving_text", "VARCHAR", "Serving as the source words it."),
     Column("is_drink", "BOOLEAN", "Whether the source classifies the food as a beverage."),
-    Column("countries", "VARCHAR[]", "ISO 3166-1 alpha-2 codes, lower case."),
+    Column("countries", "VARCHAR[]", "ISO 3166-1 alpha-2 codes."),
     Column("source_url", "VARCHAR", "Link to the record on the publisher's site."),
     Column("updated_at", "DATE", "Last update of the record in the source."),
     Column("popularity", "BIGINT", "Popularity figure of the source, if any."),
@@ -73,7 +78,7 @@ STAGING_COLUMNS: tuple[Column, ...] = (
 )
 
 OUTPUT_COLUMNS: tuple[Column, ...] = (
-    Column("id", "VARCHAR", "Stable identifier: `<source>:<id in the source>`."),
+    Column("id", "VARCHAR", "Identifier of the source record: `<source>:<id in the source>`."),
     Column("source", "VARCHAR", "Identifier of the source in `sources.toml`."),
     Column("source_dataset", "VARCHAR", "Sub-dataset inside the source, if it has several."),
     Column("source_record_id", "VARCHAR", "Identifier of the record in the source."),
@@ -87,7 +92,12 @@ OUTPUT_COLUMNS: tuple[Column, ...] = (
     Column("basis", "VARCHAR", "`100g` or `100ml`: what the nutrient values refer to."),
     Column("energy_kcal", "DOUBLE", "Energy, kcal."),
     Column("protein_g", "DOUBLE", "Protein, g."),
-    Column("carbohydrate_g", "DOUBLE", "Carbohydrate, g."),
+    Column("carbohydrate_g", "DOUBLE", "Available carbohydrate, dietary fibre excluded, g."),
+    Column(
+        "carbohydrate_total_g",
+        "DOUBLE",
+        "Carbohydrate of the source when it includes fibre, g; NULL otherwise.",
+    ),
     Column("sugars_g", "DOUBLE", "Sugars, g."),
     Column("fat_g", "DOUBLE", "Fat, g."),
     Column("saturated_fat_g", "DOUBLE", "Saturated fat, g."),
@@ -98,7 +108,12 @@ OUTPUT_COLUMNS: tuple[Column, ...] = (
     Column("serving_unit", "VARCHAR", "`g` or `ml`."),
     Column("serving_text", "VARCHAR", "Serving as the source words it."),
     Column("is_drink", "BOOLEAN", "Whether the source classifies the food as a beverage."),
-    Column("countries", "VARCHAR[]", "Countries where the product is sold (ISO alpha-2)."),
+    Column(
+        "countries",
+        "VARCHAR[]",
+        "Countries the values apply to, ISO 3166-1 alpha-2, upper case: where a product is"
+        " sold, or the country of the authority publishing a generic food.",
+    ),
     Column("popularity", "BIGINT", "Popularity figure of the source (Open Food Facts scans)."),
     Column("has_macros", "BOOLEAN", "Energy, protein, carbohydrate and fat are all present."),
     Column("plausible", "BOOLEAN", "No quality flag was raised."),
@@ -109,6 +124,7 @@ OUTPUT_COLUMNS: tuple[Column, ...] = (
 )
 
 BARCODE_EXTRA_COLUMNS: tuple[Column, ...] = (
+    Column("product_id", "VARCHAR", "Identifier of the product itself: `gtin:<barcode>`."),
     Column("source_count", "INTEGER", "Number of sources that know the barcode."),
     Column("sources", "VARCHAR[]", "Identifiers of the sources that know the barcode."),
     Column("other_records", "VARCHAR[]", "Ids of the other records with the same barcode."),
@@ -121,10 +137,13 @@ FLAG_ENERGY_FROM_KJ = "energy_from_kj"
 FLAG_SALT_FROM_SODIUM = "salt_from_sodium"
 FLAG_ALCOHOL_FROM_ABV = "alcohol_from_abv"
 FLAG_BASIS_ASSUMED = "basis_assumed"
+FLAG_CARBOHYDRATE_FIBER_SUBTRACTED = "carbohydrate_fiber_subtracted"
+FLAG_CARBOHYDRATE_INCLUDES_FIBER = "carbohydrate_includes_fiber"
 FLAG_INEXACT_VALUES = "inexact_values"
 FLAG_OBSOLETE = "obsolete"
 FLAG_BARCODE_INVALID = "barcode_invalid"
 FLAG_BARCODE_RESTRICTED = "barcode_restricted"
+FLAG_KRATHEOS_CORRECTED = "kratheos_corrected"
 
 # Flags raised by the quality checks. Any of them makes a record implausible.
 FLAG_VALUE_OUT_OF_RANGE = "value_out_of_range"
@@ -139,10 +158,15 @@ INFO_FLAGS: dict[str, str] = {
     FLAG_SALT_FROM_SODIUM: "Salt was not given; salt = sodium x 2.5.",
     FLAG_ALCOHOL_FROM_ABV: "Alcohol was given in % vol; g = % vol x 0.789.",
     FLAG_BASIS_ASSUMED: "The source does not tell 100 g from 100 ml; 100 g was assumed.",
+    FLAG_CARBOHYDRATE_FIBER_SUBTRACTED: "The source gives carbohydrate with fibre included;"
+    " fibre was subtracted (the source figure is in carbohydrate_total_g).",
+    FLAG_CARBOHYDRATE_INCLUDES_FIBER: "The source gives carbohydrate with fibre included and no"
+    " fibre value: the figure could not be converted and still includes fibre.",
     FLAG_INEXACT_VALUES: "A value was given as 'traces' (kept as 0) or '< x' (kept as x).",
     FLAG_OBSOLETE: "The source marks the product as no longer sold.",
     FLAG_BARCODE_INVALID: "The source has a barcode that is not a valid GTIN; it was dropped.",
     FLAG_BARCODE_RESTRICTED: "The barcode is an in-store number, not unique across retailers.",
+    FLAG_KRATHEOS_CORRECTED: "Values were corrected in Kratheos (main database only).",
 }
 
 QUALITY_FLAGS: dict[str, str] = {

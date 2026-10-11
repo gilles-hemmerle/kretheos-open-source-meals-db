@@ -10,7 +10,8 @@ is kept as 0 and `< x` as x, and the record is flagged `inexact_values`.
 
 Energy is the value computed by Ciqual according to Regulation (EU)
 No 1169/2011, protein is nitrogen multiplied by the Jones factor of the food
-(Ciqual's own headline value), carbohydrate is available carbohydrate.
+(Ciqual's own headline value). Carbohydrate is available carbohydrate, fibre
+excluded: Ciqual tags the constituent CHOAVL and lists fibre apart.
 """
 
 from __future__ import annotations
@@ -135,10 +136,10 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
     Returns:
         The row counts.
     """
-    groups = read_groups(context.download_dir / "alim_grp.xml")
-    values = read_values(context.download_dir / "compo.xml")
+    groups = read_groups(context.file("alim_grp.xml"))
+    values = read_values(context.file("compo.xml"))
     rows = []
-    foods = ET.parse(context.download_dir / "alim.xml").getroot()
+    foods = ET.parse(context.file("alim.xml")).getroot()
     for food in foods:
         fields = _children(food)
         code = fields.get("alim_code", "")
@@ -165,6 +166,8 @@ def build(source: Source, context: AdapterContext) -> AdapterResult:
             "category": category or None,
             "basis": schema.BASIS_100G,
             "basis_assumed": False,
+            "carbohydrate_includes_fiber": False,
+            "countries": [source.country] if source.country else None,
             "is_drink": (group == DRINK_GROUP and subsubgroup not in NOT_DRINK_SUBGROUPS)
             or subsubgroup in LIQUID_MILK_SUBGROUPS,
             "source_url": FOOD_URL + code,

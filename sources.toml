@@ -25,9 +25,19 @@
 #   share_alike   true when the licence requires derived databases to keep it
 #   enabled       whether the build uses the source
 #   reason        why it is disabled (empty when enabled)
+#   country       ISO 3166-1 alpha-2 code of the country whose foods a table
+#                 of generic foods describes (the country of the authority
+#                 that publishes it); empty for a source whose records carry
+#                 their own countries
+#   mirror        where the files are stored, exactly as downloaded:
+#                   "git"      small files, downloaded into sources/<id>/
+#                              and committed with the repository
+#                   "release"  files too large for git, downloaded into the
+#                              git-ignored mirror/ under the flat name
+#                              <id>.<file name>, to be attached to a release
 #
 # Fields of a [[source.files]] entry:
-#   name          file name under downloads/<id>/
+#   name          file name (in sources/<id>/, or after `<id>.` in mirror/)
 #   url           where to download it
 #   sha256 / md5  checksum pinned for a file published under a versioned
 #                 address. A pinned file is never downloaded twice, and the
@@ -53,6 +63,8 @@ terms_quote = "The Open Food Facts database is available under the Open Database
 terms_checked = "2026-10-11"
 attribution = "Contains data from Open Food Facts (https://openfoodfacts.org), available under the Open Database License (ODbL) 1.0; individual contents under the Database Contents License (DbCL) 1.0."
 share_alike = true
+country = ""
+mirror = "release"
 enabled = true
 reason = ""
 
@@ -82,6 +94,8 @@ terms_quote = "USDA FoodData Central data are in the public domain and they are 
 terms_checked = "2026-10-11"
 attribution = "U.S. Department of Agriculture, Agricultural Research Service. FoodData Central, 2026. fdc.nal.usda.gov."
 share_alike = false
+country = "US"
+mirror = "release"
 enabled = true
 reason = ""
 
@@ -123,6 +137,8 @@ terms_quote = "Les données et les informations de la Table Ciqual 2025 sont mis
 terms_checked = "2026-10-11"
 attribution = "Anses. 2025. Table de composition nutritionnelle des aliments Ciqual 2025. https://doi.org/10.57745/RDMHWY"
 share_alike = false
+country = "FR"
+mirror = "git"
 enabled = true
 reason = ""
 
@@ -168,6 +184,8 @@ terms_quote = "Downloading is free of charge and the data may also be used for c
 terms_checked = "2026-10-11"
 attribution = "Federal Food Safety and Veterinary Office FSVO, Swiss Food Composition Database, version 7.1, https://naehrwertdaten.ch/"
 share_alike = false
+country = "CH"
+mirror = "git"
 enabled = true
 reason = ""
 
@@ -211,6 +229,8 @@ terms_quote = "Licence: Open Government Licence - Canada. (Licence text: You are
 terms_checked = "2026-10-11"
 attribution = "Health Canada, Canadian Nutrient File, 2026. Contains information licensed under the Open Government Licence - Canada."
 share_alike = false
+country = "CA"
+mirror = "git"
 enabled = true
 reason = ""
 
@@ -237,6 +257,8 @@ terms_quote = "All content is available under the Open Government Licence v3.0, 
 terms_checked = "2026-10-11"
 attribution = "Public Health England, McCance and Widdowson's The Composition of Foods Integrated Dataset 2021. Contains public sector information licensed under the Open Government Licence v3.0."
 share_alike = false
+country = "GB"
+mirror = "git"
 enabled = true
 reason = ""
 

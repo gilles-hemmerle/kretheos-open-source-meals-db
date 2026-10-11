@@ -1,8 +1,15 @@
-# Files that must never be committed: the downloaded sources, the intermediate
-# work files and the built database are all rebuilt by `make build`.
-downloads/
+# Never committed: the large source files (attached to releases instead), the
+# files prepared for a release, the intermediate work files and the built
+# database. `make build` rebuilds the last two.
+mirror/
+release/
 work/
 dist/
+
+# An interrupted download or join, anywhere.
+*.part
+*.part.json
+*.joining
 
 # Python
 .venv/
