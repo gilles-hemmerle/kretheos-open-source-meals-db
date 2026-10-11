@@ -29,9 +29,9 @@ its best ones; several such lists are put together: the best generic foods
 and dishes, the best of everything, and, when the request names a country,
 the best of each among the foods of that country, so that the foods of a
 small country are found even for a word that half the world uses. (When the
-country alone has 150 matches or more, the barcoded products of the rest of
+country alone has 120 matches or more, the barcoded products of the rest of
 the world are not ranked as well: they would come after every page a person
-reads, and ranking them doubles the time.) That is 500 foods at most, which
+reads, and ranking them doubles the time.) That is 440 foods at most, which
 are then put in this order:
 
 1. the food carrying the barcode typed;
@@ -47,8 +47,10 @@ its own small index and merged in, so it is found at once.
 
 from __future__ import annotations
 
+import functools
 import re
 import sqlite3
+import sys
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -61,13 +63,14 @@ from .foods import Context, Food
 MAX_QUERY_CHARS = 100
 MAX_WORDS = 8
 SHORT_QUERY_CHARS = 3
-POOL_GENERIC = 60
-POOL_ALL = 150
+POOL_GENERIC = 50
+POOL_ALL = 120
 POOL_LIVE = 60
 POOL_BARCODES = 40
 MIN_BARCODE_PREFIX = 4
-PROGRESS_STEPS = 2000
+PROGRESS_STEPS = 20_000
 _SEPARATORS = re.compile(r"[\s\-]")
+_NOT_A_WORD = re.compile(r"[\W_]+")
 
 
 @dataclass(frozen=True)
@@ -90,8 +93,24 @@ class Query:
         return sum(len(word) for word in self.words) < SHORT_QUERY_CHARS
 
 
+@functools.lru_cache(maxsize=1)
+def _combining_marks() -> dict[int, None]:
+    """List the combining marks of Unicode, for `str.translate` to drop them.
+
+    Returns:
+        A translation table deleting every combining mark.
+    """
+    return dict.fromkeys(
+        code for code in range(sys.maxunicode + 1) if unicodedata.combining(chr(code))
+    )
+
+
+@functools.lru_cache(maxsize=65_536)
 def fold(text: str) -> str:
     """Write a text the way the index compares it.
+
+    The names of the foods found are folded for every search and the same
+    ones come back often: the last ones are remembered.
 
     Args:
         text: Any text.
@@ -100,9 +119,8 @@ def fold(text: str) -> str:
         The words of the text in lower case, without accents, separated by
         single spaces; punctuation is dropped.
     """
-    decomposed = unicodedata.normalize("NFKD", text.casefold())
-    plain = "".join(char for char in decomposed if not unicodedata.combining(char))
-    return " ".join("".join(char if char.isalnum() else " " for char in plain).split())
+    plain = unicodedata.normalize("NFKD", text.casefold()).translate(_combining_marks())
+    return _NOT_A_WORD.sub(" ", plain).strip()
 
 
 def parse(text: str) -> Query:

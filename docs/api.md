@@ -283,7 +283,7 @@ served.
   lists it); a name equal to the text, then beginning with it, then the
   rest; generic foods before products; the most scanned products; the
   shortest name; the identifier.
-- **Depth.** A search ranks the best matches of the index (about 500 foods at
+- **Depth.** A search ranks the best matches of the index (about 440 foods at
   most) and pages through them: `next_offset` becomes `null` at the end of
   that list, not at the end of the database. `offset` may not exceed 1000.
 - **Time.** A search has a budget (`FOOD_DATA_SEARCH_BUDGET_MS`, 500 by
