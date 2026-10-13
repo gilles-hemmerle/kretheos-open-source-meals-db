@@ -55,6 +55,11 @@ NUTRIENT_FIELDS = (
 # the source `barcode_restricted`, which also covers the own-brand numbers
 # of a few retailers).
 FLAG_IN_STORE_BARCODE = "in_store_barcode"
+# Beginning of the identifier of a product a restaurant chain publishes:
+# `chain:<chain>:<country>:<key>`. The source is presented as Kratheos, its
+# id stays `chain` and its records have no barcode, so this never changes
+# (see `sources.toml`).
+CHAIN_ID_PREFIX = "chain:"
 NAME_ORIGIN_SOURCE = "source"
 NAME_ORIGIN_KRATHEOS = "kratheos"
 KRATHEOS_TITLE = kratheos.KRATHEOS_SOURCE.name
@@ -128,6 +133,23 @@ class Food:
             The version served.
         """
         return versions.choose_served(self.versions, country, user_version_votes)
+
+
+def chain_of(food: Food) -> str | None:
+    """Tell which restaurant chain publishes a food, if one does.
+
+    Args:
+        food: The food.
+
+    Returns:
+        The name of the chain (its brand, empty when the record has none)
+        for a product of the files of the chains; None for any other food,
+        whatever its brand: a crowd entry of Open Food Facts named after a
+        chain is not the chain's.
+    """
+    if food.kind == schema.KIND_PRODUCT and food.id.startswith(CHAIN_ID_PREFIX):
+        return food.brand or ""
+    return None
 
 
 def _json_list(text: str | None) -> list:

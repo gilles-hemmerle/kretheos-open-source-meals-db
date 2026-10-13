@@ -46,8 +46,20 @@ reads, and ranking them doubles the time.) They are ordered by:
 2. a barcode that is not a 13-digit in-store number before one that is;
 3. the foods of the country of the request (the version served lists it);
 4. a name equal to the text, then a name beginning with it, then the rest;
-5. the most scanned products first (the popularity of Open Food Facts);
-6. the shortest name, then the identifier, so that pages are stable.
+5. what a restaurant chain publishes for its products before the entries of
+   Open Food Facts: these are the figures of the publisher for that country;
+6. the most scanned products first (the popularity of Open Food Facts);
+7. the shortest name, then the identifier, so that pages are stable.
+
+Products of restaurant chains. A chain has no barcode and nobody scans its
+menu, so by popularity alone its products came after every crowd entry of
+the same name that was scanned once. They are ranked as the reference foods
+are, by their name (`ranking.py`): in the country of the request, a product
+whose name, or first part, is the text typed, or whose chain is ("big mac",
+"mcdonald's", "mcdonald's big mac"), comes first with the reference foods
+that are the text typed, the table of the country before its chains; any
+other product of a chain, and those of other countries, go by the order
+above.
 
 In-store barcodes. A shop numbers what it weighs and packs itself with
 numbers of its own (GTIN-13 beginning with 02, 04 or 20 to 29, and the 8
@@ -62,9 +74,16 @@ products of Lidl, Aldi, Penny or Marks & Spencer: they rank like any
 product. A lookup by barcode is not concerned.
 
 Without `kind`, both are searched: the reference foods whose name, or first
-part, is the text typed come first, in their own order (40 at most);
-everything else follows in the order of the products, generic foods before
-products where that order does not tell them apart.
+part, is the text typed come first, in their own order (40 at most), with
+the products of the chains that are the text typed. When no table has a food
+that is the text typed, the reference foods whose first part begins with it,
+in the language of the request, stand in: nobody names a food "Frites",
+Ciqual has "Frites de pommes de terre, surgelées, cuites en friteuse", and a
+person who types "frites" gets it before the fries of the chains and the
+bags of Open Food Facts.
+Everything else follows
+in the order of the products, generic foods, then products of chains, before
+the other products where that order does not tell them apart.
 
 What each question costs. Asking the index anything about a word costs the
 time of reading that word in it, however few rows are wanted, so the
@@ -114,6 +133,12 @@ REFERENCE_RANKED = 300
 REFERENCE_KEPT = 200
 REFERENCE_FIRST = 40
 MIN_BARCODE_PREFIX = 4
+# Whose figures a food carries, where the order of the products does not tell
+# two foods apart: a food-composition table, a restaurant chain for its own
+# products, anyone else (the crowd entries of Open Food Facts, what people add).
+FROM_A_TABLE = 0
+FROM_ITS_CHAIN = 1
+FROM_ANYONE = 2
 PROGRESS_STEPS = 20_000
 _SEPARATORS = re.compile(r"[\s\-]")
 
@@ -314,8 +339,8 @@ def _reference_order(
     language: str | None,
     country: str | None,
     deadline: float,
-    only_the_food_typed: bool = False,
-) -> list[tuple[tuple, int]]:
+    only_the_nearest: bool = False,
+) -> tuple[list[tuple[tuple, int]], int]:
     """Put the reference foods matching a text in the order of `ranking.py`.
 
     Args:
@@ -325,13 +350,16 @@ def _reference_order(
         language: Language of the request, if any.
         country: Country of the request, if any.
         deadline: Time after which the index is no longer asked.
-        only_the_food_typed: Keep only the foods ranked by a name that is,
-            or whose first part is, the text typed.
+        only_the_nearest: Keep only the foods ranked by a name that is, or
+            whose first part is, the text typed; when there is none, those
+            whose first part begins with the words typed stand in.
 
     Returns:
-        The sort key and the internal number of each reference food, best
-        first. The keys are computed on the names of the main database; what
-        the live database adds is counted when the foods are put together.
+        The sort key and the internal number of each reference food kept,
+        best first; and whether those kept stand in for the text typed,
+        none being it. The keys are computed on the names of the main
+        database; what the live database adds is counted when the foods are
+        put together.
     """
     generation = context.generation
     if sum(len(block.rows) for block in blocks) <= REFERENCE_MATCHES:
@@ -350,15 +378,28 @@ def _reference_order(
                 deadline,
             )
             pks += [row[0] for row in rows or () if row[0] in generation.reference_pks]
-    keyed = []
-    for pk, (food_id, countries, names) in catalogue.reference_names(context.base, pks).items():
-        if only_the_food_typed and not ranking.may_be_the_food_typed(names, query.words):
-            continue
-        key = ranking.reference_key(names, query.words, language, countries, country, food_id)
-        if not only_the_food_typed or ranking.is_the_food_typed(key[ranking.REFERENCE_KEY_MATCH]):
-            keyed.append((key, pk))
-    keyed.sort()
-    return keyed
+    read = catalogue.reference_names(context.base, pks)
+
+    def keyed(everything: bool, stand_in: bool = False) -> list[tuple[tuple, int]]:
+        """Order the foods: all of them, those typed, or those standing in."""
+        found = []
+        for pk, (food_id, countries, names) in read.items():
+            if not everything and not stand_in:
+                # Thousands of names may match: most are told apart cheaply.
+                if not ranking.may_be_the_food_typed(names, query.words):
+                    continue
+            key = ranking.reference_key(names, query.words, language, countries, country, food_id)
+            if everything or ranking.comes_first(key, stand_in):
+                found.append((key, pk))
+        found.sort()
+        return found
+
+    if not only_the_nearest:
+        return keyed(everything=True), False
+    found = keyed(everything=False)
+    if found:
+        return found, False
+    return keyed(everything=False, stand_in=True), True
 
 
 def _index_matches(
@@ -513,6 +554,7 @@ def _order(
     country: str | None,
     served: dict,
     kind: str | None,
+    stand_in: bool = False,
 ) -> tuple:
     """Build the sort key of a food among the results.
 
@@ -524,22 +566,25 @@ def _order(
         country: Country of the request, if any.
         served: The version of the food this request gets.
         kind: The kind asked for, if any.
+        stand_in: Whether no reference food is the text typed, so that
+            those that begin with it come first (see `_reference_order`).
 
     Returns:
         A key sorting the results as the module describes: the barcode
         typed; then the reference foods in the order of `ranking.py` (all of
         them in a search of reference foods, those that are the food typed
-        otherwise); then the rest in the order of the products.
+        otherwise, or that begin with it when none is) and, in the same
+        order, the products of the chains that are the food typed; then the
+        rest in the order of the products.
     """
     typed_barcode = 0 if barcode and food.barcode == barcode else 1
-    if food.kind == KIND_GENERIC:
+    chain = foods.chain_of(food)
+    if food.kind == KIND_GENERIC or chain is not None:
         names = {lang: entry[0] for lang, entry in food.names.items()}
         reference = ranking.reference_key(
-            names, query.words, language, served["countries"], country, food.id
+            names, query.words, language, served["countries"], country, food.id, chain
         )
-        if kind == KIND_GENERIC or ranking.is_the_food_typed(
-            reference[ranking.REFERENCE_KEY_MATCH]
-        ):
+        if kind == KIND_GENERIC or ranking.comes_first(reference, stand_in):
             return (typed_barcode, 0, *reference)
     best = 2
     shortest = 99
@@ -555,13 +600,17 @@ def _order(
             best, shortest = closeness, len(folded.split())
         elif closeness == best:
             shortest = min(shortest, len(folded.split()))
+    if food.kind == KIND_GENERIC:
+        whose = FROM_A_TABLE
+    else:
+        whose = FROM_ANYONE if chain is None else FROM_ITS_CHAIN
     return (
         typed_barcode,
         1,
         1 if is_in_store_label(food.barcode) else 0,
         0 if country and country in served["countries"] else 1,
         best,
-        0 if food.kind == KIND_GENERIC else 1,
+        whose,
         -food.popularity,
         shortest,
         food.id,
@@ -613,11 +662,12 @@ def search(
     # Where the reference foods sit in blocks, all those matching are read
     # first; the lists of the index are then only needed for the rest.
     blocks = None
+    stand_in = False
     if kind != KIND_PRODUCT and context.generation.reference_blocks:
         everything = kind != KIND_GENERIC
         blocks = _read_blocks(context, query, deadline, with_ranks=everything)
-        references = _reference_order(
-            context, query, blocks, language, country, deadline, only_the_food_typed=everything
+        references, stand_in = _reference_order(
+            context, query, blocks, language, country, deadline, only_the_nearest=everything
         )
         pks += [pk for _, pk in references[: REFERENCE_FIRST if everything else REFERENCE_KEPT]]
     if kind != KIND_GENERIC or blocks is None:
@@ -645,6 +695,7 @@ def search(
         if drink is not None and food.is_drink != drink:
             continue
         served = food.served(country, context.user_version_votes)
-        ranked.append((_order(food, query, barcode, language, country, served, kind), food))
+        key = _order(food, query, barcode, language, country, served, kind, stand_in)
+        ranked.append((key, food))
     ranked.sort(key=lambda item: item[0])
     return [food for _, food in ranked]

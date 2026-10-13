@@ -415,8 +415,39 @@ served.
 - **Products** (`kind=product`) are ordered by: the barcode typed; a barcode
   that is not a 13-digit in-store number before one that is; the foods of `country`
   (the version served lists it); a name equal to the text, then beginning
-  with it, then the rest; the most scanned products; the shortest name; the
-  identifier.
+  with it, then the rest; what a restaurant chain publishes for its own
+  products before the other products; the most scanned products; the
+  shortest name; the identifier.
+- **Products of restaurant chains** (identifiers `chain:...`, source title
+  "Kratheos"). A chain has no barcode and nobody scans a menu: ranked by
+  scans, its figures came after every entry of Open Food Facts of the same
+  name. They are the figures of the publisher for a country, so they are
+  ranked by their name with the rules of the reference foods:
+  - a product is named by its name and by its name after its chain
+    ("McDonald's, Big Mac", as USDA writes "McDONALD'S, BIG MAC"). When the
+    text is the name of the product or its first part ("big mac", "frites"
+    for "Frites (Grande)"), the name of the chain ("mcdonald's": every
+    product of it), or both ("mcdonald's big mac"), the products of the
+    `country` of the request come first, with the reference foods that are
+    the text typed and in their order;
+  - in that order the table of the country comes before its chains:
+    "cheeseburger" in Switzerland is the cheeseburger of the Swiss table,
+    those of the chains in Switzerland, then the tables of the other
+    countries. "big mac" in France begins with what McDonald's publishes
+    for France;
+  - the language of a menu does not count there (the Swiss files are in
+    French: "Big Mac" asked in German in Switzerland is the Swiss one);
+  - any other match ("mcdonald's frites" for "La petite Portion de
+    Frites"), and what a chain publishes for another country, is ordered as
+    a product: within the foods of a country and the same match, the chain
+    before the entries of Open Food Facts.
+
+  This also holds for what a chain sells of another brand: "nutella" or
+  "coca-cola" in Switzerland begin with those of the menus of McDonald's,
+  before the jar and the bottle of the shops.
+
+  Only the records of the files of the chains are concerned: an entry of
+  Open Food Facts whose brand is a chain is a product like any other.
 - **In-store barcodes** (flag `in_store_barcode`). Those of 13 digits, the
   labels of the counter (320 000 foods, hardly ever scanned twice), come
   after every other product: when 120 other products match, those fill the
@@ -427,9 +458,15 @@ served.
   not concerned.
 - **Without `kind`** both are searched. The reference foods whose name, or
   first part, is the text typed come first, in the order of the reference
-  foods (40 at most: "pomme" has 37 of them in the five tables, "riz" 3);
-  everything else follows in the order of the products, generic foods
-  before products where that order does not tell them apart.
+  foods (40 at most: "pomme" has 37 of them in the five tables, "riz" 3),
+  with the products of the chains that are the text typed. When no
+  reference food is the text typed, those whose first part begins with it,
+  in the language of the request, stand in: no table names a food "Frites",
+  Ciqual has "Frites de pommes de terre, surgelées, cuites en friteuse",
+  and "frites" in French gives it, then the fries of the chains, then the
+  bags of Open Food Facts. Everything else follows in the order of the
+  products: generic foods, then products of chains, before the other
+  products where that order does not tell them apart.
 - **Depth.** A search ranks the best matches of the index (a few hundred
   foods at most, 200 for `kind=generic`) and pages through them:
   `next_offset` becomes `null` at the end of that list, not at the end of

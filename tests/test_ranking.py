@@ -276,3 +276,144 @@ def test_equal_names_are_told_apart_by_the_identifier() -> None:
     assert not ranking.begins_with_the_text(MATCH_FIRST_LETTERS)
     # A food without any name is last, not an error.
     assert ranking.reference_key({}, typed("banane"), "fr", [], "FR", "y")[0] == 2
+
+
+def ranked(
+    foods: dict[str, tuple[str, dict[str, str], str | None]],
+    text: str,
+    language: str | None,
+    country: str | None,
+) -> list[str]:
+    """Put reference foods and products of chains in the order of a search.
+
+    Args:
+        foods: For each identifier, the country, the names and, for a
+            product of a chain, the name of the chain (None for a table).
+        text: The text typed.
+        language: Language of the request.
+        country: Country of the request.
+
+    Returns:
+        The identifiers, best first.
+    """
+    keys = {
+        food_id: ranking.reference_key(
+            names, typed(text), language, [place], country, food_id, chain
+        )
+        for food_id, (place, names, chain) in foods.items()
+    }
+    return sorted(keys, key=keys.get)
+
+
+def matched(name: str, text: str, chain: str | None, language: str = "fr") -> int:
+    """Say how the name of a food answers a text, as its sort key records it."""
+    key = ranking.reference_key({"fr": name}, typed(text), language, ["FR"], "FR", "x", chain)
+    return key[ranking.REFERENCE_KEY_MATCH]
+
+
+def test_a_product_of_a_chain_is_named_by_its_name_and_after_its_chain() -> None:
+    """It reads "McDonald's, Big Mac", as USDA writes "McDONALD'S, BIG MAC"."""
+    assert matched("Big Mac", "big mac", "McDonald's") == MATCH_NAME
+    # The text names the chain: every product of it is what was typed.
+    assert matched("Big Mac", "mcdonald's", "McDonald's") == MATCH_FIRST_PART
+    assert matched("WHOPPER®", "Burger King", "Burger King") == MATCH_FIRST_PART
+    assert matched("Big Mac", "McDonald's Big Mac", "McDonald's") == MATCH_NAME
+    assert matched("Frites (Grande)", "frites", "Five Guys") == MATCH_FIRST_PART
+    # The chain and a word of the product: found, but not the product typed.
+    for name in ("La petite Portion de Frites", "La Sauce Pommes-Frites"):
+        found = matched(name, "mcdonald's frites", "McDonald's")
+        assert found == MATCH_EVERY_WORD and not ranking.is_the_food_typed(found)
+    # Half a name of chain is not the chain; another chain is nothing.
+    assert matched("Big Mac", "mcdo", "McDonald's") == MATCH_FIRST_LETTERS
+    assert matched("Big Mac", "burger king", "McDonald's") == MATCH_NONE
+    # Without a chain the brand is not read: a crowd entry is ranked as a product.
+    assert matched("Big Mac", "mcdonald's", None) == MATCH_NONE
+    # A product whose chain is unknown is still one of a chain.
+    key = ranking.reference_key({"fr": "Big Mac"}, typed("big mac"), "fr", ["FR"], "FR", "x", "")
+    assert key[ranking.REFERENCE_KEY_MATCH] == MATCH_NAME and key[3] == 1
+
+
+BURGERS = {
+    "swiss:14024": ("CH", {"fr": "Cheeseburger", "de": "Cheeseburger"}, None),
+    "ciqual:25414": ("FR", {"fr": "Cheeseburger, de restauration rapide"}, None),
+    "usda:fndds:27510172": ("US", {"en": "Cheeseburger (McDonalds)"}, None),
+    "usda:fndds:27510389": ("US", {"en": "Big Mac (McDonalds)"}, None),
+    "chain:mcdonald-s:ch:200024": ("CH", {"fr": "Cheeseburger"}, "McDonald's"),
+    "chain:mcdonald-s:fr:13160": ("FR", {"fr": "Cheeseburger"}, "McDonald's"),
+    "chain:mcdonald-s:ch:200008": ("CH", {"fr": "Big Mac"}, "McDonald's"),
+    "chain:mcdonald-s:fr:13111": ("FR", {"fr": "Big Mac"}, "McDonald's"),
+    "chain:mcdonald-s:de:200020": ("DE", {"de": "Big Mac"}, "McDonald's"),
+}
+
+
+def first(
+    foods: dict[str, tuple[str, dict[str, str], str | None]],
+    text: str,
+    language: str | None,
+    country: str | None,
+) -> list[str]:
+    """Give the foods that come before the products in a search of everything, in order."""
+    keys = {
+        food_id: ranking.reference_key(
+            names, typed(text), language, [place], country, food_id, chain
+        )
+        for food_id, (place, names, chain) in foods.items()
+    }
+    return [food_id for food_id in sorted(keys, key=keys.get) if ranking.comes_first(keys[food_id])]
+
+
+def test_the_table_of_the_country_then_its_chains_then_the_other_tables() -> None:
+    """A generic word keeps its reference food first; a product of a chain has none before it."""
+    assert first(BURGERS, "cheeseburger", "fr", "CH") == [
+        "swiss:14024",  # the table of the country
+        "chain:mcdonald-s:ch:200024",  # then what the chains publish for that country
+        "ciqual:25414",  # the table of another country
+        "usda:fndds:27510172",  # no French name
+    ]
+    assert first(BURGERS, "cheeseburger", "fr", "FR") == [
+        "ciqual:25414",
+        "chain:mcdonald-s:fr:13160",
+        "swiss:14024",
+        "usda:fndds:27510172",
+    ]
+    # No table has a "Big Mac" in French: the chain of the country comes first, before
+    # the record USDA has of it in English. What the chain publishes for other
+    # countries is not the product typed: it is ordered with the products.
+    assert first(BURGERS, "big mac", "fr", "FR") == [
+        "chain:mcdonald-s:fr:13111",
+        "usda:fndds:27510389",
+    ]
+    # In the country of the request the language of a menu does not count: in German
+    # in Switzerland, the Swiss figures, whose file is in French.
+    assert first(BURGERS, "big mac", "de", "CH") == [
+        "chain:mcdonald-s:ch:200008",
+        "usda:fndds:27510389",
+    ]
+    # Where no file of a chain is, and without a country, the table alone.
+    assert first(BURGERS, "big mac", "en", "US") == ["usda:fndds:27510389"]
+    assert first(BURGERS, "big mac", "fr", None) == ["usda:fndds:27510389"]
+    # The chain typed: its products of the country, whatever their name.
+    assert set(first(BURGERS, "mcdonald's", "fr", "FR")) == {
+        "chain:mcdonald-s:fr:13111",
+        "chain:mcdonald-s:fr:13160",
+    }
+    # Among the products, the menu of another country answers in its language, like
+    # any name: its key is that of a name in another language.
+    tea = ranking.reference_key({"fr": "Thé"}, typed("the"), "en", ["CH"], "US", "x", "McDonald's")
+    assert tea[0] == 1 and not ranking.comes_first(tea)
+    assert ranking.reference_key({"fr": "Thé"}, typed("the"), "en", ["CH"], "CH", "x", "M")[0] == 0
+
+
+def test_a_reference_food_that_begins_with_the_text_only_stands_in_when_asked() -> None:
+    """For "frites", "Frites de pommes de terre", in the language of the request."""
+    fries = {"fr": "Frites de pommes de terre, surgelées, cuites en friteuse"}
+    key = ranking.reference_key(fries, typed("frites"), "fr", ["FR"], "FR", "ciqual:4032")
+    assert key[ranking.REFERENCE_KEY_MATCH] == MATCH_FIRST_WORDS
+    assert not ranking.comes_first(key) and ranking.comes_first(key, stand_in=True)
+    other = ranking.reference_key(fries, typed("frites"), "de", ["FR"], "FR", "ciqual:4032")
+    assert not ranking.comes_first(other, stand_in=True)
+    # A product of a chain never stands in: it is the product typed or it is not.
+    chain = ranking.reference_key(
+        {"fr": "Frites de patate douce"}, typed("frites"), "fr", ["FR"], "FR", "x", "Quick"
+    )
+    assert not ranking.comes_first(chain, stand_in=True)

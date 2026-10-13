@@ -5,13 +5,15 @@ The full-text index finds the foods; this module puts the reference foods
 predict. Nothing here knows a food: there is no list of foods, only rules on
 the words of a name, and three short lists of words the tables use.
 
-A reference food is ranked by, in this order:
+A reference food (and a product of a chain, see below) is ranked by, in
+this order:
 
 1. **language**: a name in the language of the request that matches what was
    typed beats a name that only matches in another language;
 2. **the name is, or begins with, the words typed**, before the names that
    only hold them somewhere (`begins_with_the_text`);
-3. the **country** of the request: the table of the person's country first;
+3. the **country** of the request: the table of the person's country first,
+   then the menus of the chains in that country, then the other tables;
 4. **how the name matches** (`match_class`), from the best to the worst:
    the name is the text typed; its first part, before the first comma or
    parenthesis, is the text typed ("Pomme, chair et peau, crue" for
@@ -58,6 +60,27 @@ Details, each from what the tables really write:
   ("getrocknet" and "trocken", "dried" and "dry"). The lists cannot tell them
   apart: "Riz blanc, sec" and "Riso raffinato, secco" rank with the dried
   foods, after cooked rice.
+
+The products of a restaurant chain (`reference_key` with `chain`). What a
+chain publishes for a country are the figures of the publisher, as those of
+a table are: its products are ranked by their name with the same rules,
+not by how often a crowd scanned them. What is theirs:
+
+* a product is named as the tables name such dishes, "McDONALD'S, BIG MAC"
+  in USDA: by its name, and by its name after that of its chain. "big mac"
+  is the name of the product; "mcdonald's" is the first part of
+  "McDonald's, Big Mac", so the text names the chain and every product of
+  it answers; "mcdonald's big mac" is the whole of it;
+* only in the country of the request (`comes_first`): what McDonald's
+  publishes for Switzerland is the Big Mac of a person in Switzerland, and
+  one product of Spain among others for her, ordered as products are;
+* there the language of its name does not count: the file of a country is
+  in one of its languages (the Swiss files are in French), and a person who
+  types "Big Mac" in German in Switzerland gets the Swiss figures;
+* the reference food of the country goes first: "cheeseburger" is the
+  cheeseburger of the Swiss table, then those of the chains in Switzerland,
+  then the tables of the other countries. A text no table of the country
+  has a food for ("big mac") begins with the chain.
 
 The lists of form words (`FORM_WORDS`) are those the tables use (Ciqual, the
 Swiss table, the Canadian file, USDA, CoFID) in French, English, German and
@@ -464,8 +487,9 @@ def reference_key(
     countries: Iterable[str],
     country: str | None,
     food_id: str,
+    chain: str | None = None,
 ) -> tuple:
-    """Build the sort key of a reference food among the results of a search.
+    """Build the sort key of a food ranked by its name among the results of a search.
 
     Args:
         names: The names of the food, by language code.
@@ -474,29 +498,39 @@ def reference_key(
         countries: Countries the values of the food apply to.
         country: Country of the request, if any.
         food_id: Identifier of the food.
+        chain: For a product a restaurant chain publishes, the name of the
+            chain (empty when unknown); None for a reference food. Each name
+            of the product is also read after it, "McDonald's, Big Mac", and
+            in the country of the request its language does not count.
 
     Returns:
         A key sorting as the module describes: language, a name that is or
-        begins with the text, country, match, words of the first part, form,
-        shortest name, identifier. Its fourth element is the `MATCH_...`
+        begins with the text, country, reference food before product of a
+        chain, match, words of the first part, form, shortest name,
+        identifier. `REFERENCE_KEY_MATCH` is the position of the `MATCH_...`
         value of the best name.
     """
     wanted = (language or "").split("-")[0]
+    local = bool(country) and country in countries
     best: tuple | None = None
     for lang, name in names.items():
-        matched, head_words = match(name, typed, lang)
-        if matched == MATCH_NONE:
-            other_language = 2
-        else:
-            other_language = 0 if not wanted or lang == wanted else 1
-        candidate = (other_language, matched, lang, name, head_words)
-        if best is None or candidate < best:
-            best = candidate
+        for written in (name, f"{chain}, {name}") if chain else (name,):
+            matched, head_words = match(written, typed, lang)
+            if matched == MATCH_NONE:
+                other_language = 2
+            elif chain is not None and local:
+                other_language = 0
+            else:
+                other_language = 0 if not wanted or lang == wanted else 1
+            candidate = (other_language, matched, lang, name, head_words)
+            if best is None or candidate < best:
+                best = candidate
     other_language, matched, lang, name, head_words = best or (2, MATCH_NONE, "", "", 0)
     return (
         other_language,
         0 if begins_with_the_text(matched) else 1,
-        0 if country and country in countries else 1,
+        0 if local else 1,
+        0 if chain is None else 1,
         matched,
         head_words,
         form_level(name, lang),
@@ -505,5 +539,31 @@ def reference_key(
     )
 
 
-REFERENCE_KEY_MATCH = 3
+REFERENCE_KEY_MATCH = 4
 """Position of the `MATCH_...` value in the key `reference_key` returns."""
+
+
+def comes_first(key: tuple, stand_in: bool = False) -> bool:
+    """Tell whether a food comes before the products in a search of everything.
+
+    Args:
+        key: The key `reference_key` gave the food.
+        stand_in: Whether no reference food is the text typed. Nobody names
+            a food "Frites": Ciqual has "Frites de pommes de terre,
+            surgelées, cuites en friteuse", and that is the food a person
+            who types "frites" is shown first.
+
+    Returns:
+        True for a reference food whose name, or first part, is the text
+        typed, and for a product of a chain that is, in the country of the
+        request only: what a chain publishes for another country is a
+        product of another country. When `stand_in` is set, also for a
+        reference food whose first part begins with the words typed, in the
+        language of the request.
+    """
+    other_language, _, other_country, of_a_chain, matched = key[: REFERENCE_KEY_MATCH + 1]
+    if of_a_chain:
+        return is_the_food_typed(matched) and not other_country
+    if is_the_food_typed(matched):
+        return True
+    return stand_in and begins_with_the_text(matched) and not other_language

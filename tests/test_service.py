@@ -370,6 +370,60 @@ def test_without_a_kind_the_reference_food_typed_comes_before_the_products(
     assert service.found("q=cola&country=US")[:2] == ["gtin:0049000028911", "usda:sr_legacy:14400"]
 
 
+def test_the_products_of_a_chain_are_ranked_by_their_name(service: Running) -> None:
+    """What a chain publishes comes first when the text names it, and before what people add."""
+    burger = dict(PRODUCT, names={"fr": "Burger maison"}, countries=["CH"])
+    burger_id = service.post("/v1/products", burger)[1]["id"]
+    named = dict(PRODUCT, names={"fr": "Chaîne exemple"}, brand="Autre", countries=["CH"])
+    named_id = service.post("/v1/products", named)[1]["id"]
+    # Both names begin with the text, in the same country: the figures of the chain
+    # first, though the other name is the shorter one.
+    assert service.found("q=burger&lang=fr&country=CH")[:2] == [
+        "chain:chaine-exemple:ch:b-001",  # Burger du test
+        burger_id,
+    ]
+    # The text names the chain: its products of the country come first, before a
+    # product of the country whose own name is the text. What the chain publishes for
+    # another country is a product of another country.
+    of_the_chain = [
+        "chain:chaine-exemple:ch:b-001",
+        "chain:chaine-exemple:ch:d-007",
+        "chain:chaine-exemple:ch:w-009",
+        "chain:chaine-exemple:ch:frites-moyennes",
+        named_id,
+        "chain:chaine-exemple:us:b-001",
+    ]
+    assert service.found("q=chaine+exemple&lang=fr&country=CH") == of_the_chain
+    assert service.found("q=chaine+exemple&lang=fr&country=CH&kind=product") == of_the_chain
+    # The language of a menu does not count there: the Swiss file is in French, and a
+    # person who asks in German gets the Swiss products first all the same.
+    assert service.found("q=chaine+exemple&lang=de&country=CH") == of_the_chain
+    # From the United States the American product is the one of the chain typed;
+    # without a country none is, and the name equal to the text comes first as before.
+    american = service.found("q=chaine+exemple&lang=en&country=US")
+    assert american[0] == "chain:chaine-exemple:us:b-001" and american[1] == named_id
+    assert service.found("q=chaine+exemple")[0] == named_id
+    # The product typed, and the chain with it.
+    assert service.found("q=test+burger&lang=en&country=US")[0] == "chain:chaine-exemple:us:b-001"
+    assert service.found("q=chaine+exemple+the+glace") == ["chain:chaine-exemple:ch:d-007"]
+
+
+def test_a_reference_food_that_begins_with_the_text_stands_in_when_none_is_the_text(
+    service: Running,
+) -> None:
+    """No table names a food "Jus": the juices of the tables come before a product named so."""
+    juice = dict(PRODUCT, names={"fr": "Jus"}, brand="Verger du test", countries=["FR"])
+    juice_id = service.post("/v1/products", juice)[1]["id"]
+    assert service.found("q=jus&lang=fr&country=FR") == [
+        "ciqual:2069",  # Jus de pomme, pur jus: the table of the country
+        "swiss:605",  # Jus de pomme
+        juice_id,
+    ]
+    # Only in the language of the request: in German the tables have no "Jus", and
+    # the product whose name is the text keeps the first place it had.
+    assert service.found("q=jus&lang=de&country=FR") == [juice_id, "ciqual:2069", "swiss:605"]
+
+
 def test_what_was_read_of_the_reference_foods_is_not_asked_of_the_index_again(
     service: Running, tmp_path: Path
 ) -> None:
