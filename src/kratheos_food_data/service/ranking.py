@@ -3,7 +3,9 @@
 The full-text index finds the foods; this module puts the reference foods
 (the generic foods of the food-composition tables) in an order a person can
 predict. Nothing here knows a food: there is no list of foods, only rules on
-the words of a name, and three short lists of words the tables use.
+the words of a name, and three short lists of words the tables use. The one
+exception is the usual kind of two foods, the egg and the milk
+(`USUAL_KINDS`), told below.
 
 A reference food (and a product of a chain, see below) is ranked by, in
 this order:
@@ -25,10 +27,13 @@ this order:
 5. for a name that begins with the text, **the fewest words in its first
    part**: "Lait entier, UHT" is nearer to "lait" than "Lait fermenté à
    boire, nature", "Riso raffinato" nearer to "riso" than "Riso al latte";
-6. **how plain the food is** (`form_level`): raw, fresh and unflavoured
+6. **the usual kind**, where a table names it: the eggs of the hen, raw
+   then cooked, before those of the duck and the goose
+   (`says_the_usual_kind`);
+7. **how plain the food is** (`form_level`): raw, fresh and unflavoured
    forms, then names that say nothing, then cooked forms, and last dried,
    powdered, canned and pre-packed foods and baby food;
-7. the shortest name, then the identifier.
+8. the shortest name, then the identifier.
 
 Why the country comes where it does. The tables do not name foods the same
 way: the Canadian file writes "Riz, blanc et sausage, arômatisé", "Lait,
@@ -60,6 +65,44 @@ Details, each from what the tables really write:
   ("getrocknet" and "trocken", "dried" and "dry"). The lists cannot tell them
   apart: "Riz blanc, sec" and "Riso raffinato, secco" rank with the dried
   foods, after cooked rice.
+
+The usual kind (`USUAL_KINDS`). Asked for an egg, a person means that of
+the hen. The tables say so in two ways. USDA and Ciqual do not name the
+usual kind: "Egg, whole, raw, fresh", "Oeuf cru", beside "Egg, duck, whole,
+fresh, raw" and "Oeuf de cane, cru"; there the shortest name is the usual
+kind, and nothing was wrong. The Canadian file and CoFID name it like the
+others: "Egg, chicken, whole, fresh or frozen, raw" beside "Egg, duck,
+whole, fresh, raw", "Eggs, chicken, whole, raw" beside "Eggs, quail, whole,
+raw"; all are raw eggs, the shortest name decided, and the duck, the goose,
+the quail and the turkey came before the hen. No rule on the words alone
+tells "chicken" from "duck": a kind is only usual for a food ("Soup,
+chicken" is not the usual soup), and a count of how many names of a table
+share a kind puts the white and the yolk of Ciqual before its "Oeuf cru".
+So the two foods whose usual animal some tables name are listed, with that
+animal, in five languages:
+
+* a name that says the usual kind of its food as a part of its own ("Egg,
+  chicken, whole", "Oeuf, poule, entier") comes before the names that do
+  not, whatever their form: the fried and the boiled egg of the hen before
+  the raw egg of the duck. A table names the usual kind for all its eggs or
+  for none, and the country goes first, so the unnamed "Egg, whole, raw" of
+  USDA only meets the named ones among the tables of other countries;
+* said in the first part with the word that links it, the usual kind does
+  not count there, unless it was typed: the "Oeuf de poule, entier, cru" and
+  "Uovo di gallina, intero, crudo" of the Swiss table are "Oeuf" and "Uovo";
+* it only reads names that begin with the food: "Egg roll, chicken" is not
+  an egg, "Turkey, hen, breast" not a hen's;
+* German writes one word, "Hühnerei", "Kuhmilch", which the index only
+  finds from its beginning: the German words of the list are for names
+  written in several words;
+* nothing tells the usual milk where a table does not name the cow: the
+  Canadian file has "Milk, fluid, whole, pasteurized, homogenized, 3.25%
+  M.F." beside "Milk, fluid, chocolate, whole" and "Milk, fluid, sheep,
+  whole", and the shortest still comes first.
+
+The ligature of "œuf", "bœuf", "cœur" is written out, "oe", in every name
+and in what is typed: the tables write "Oeuf", people write both. The index
+keeps it, so a search asks it for both spellings (`spellings`).
 
 The products of a restaurant chain (`reference_key` with `chain`). What a
 chain publishes for a country are the figures of the publisher, as those of
@@ -214,6 +257,25 @@ FORM_WORDS: dict[str, dict[int, tuple[str, ...]]] = {
     },
 }
 
+# Language -> the foods whose usual kind some tables name, each with the
+# words that say it, folded: the egg and the hen, the milk and the cow. A
+# plural is the same word (`same_word`); the Italian plural of the egg is not
+# made with an ending and is listed.
+USUAL_KINDS: dict[str, tuple[tuple[tuple[str, ...], tuple[str, ...]], ...]] = {
+    "fr": ((("oeuf",), ("poule",)), (("lait",), ("vache",))),
+    "en": ((("egg",), ("chicken", "hen")), (("milk",), ("cow",))),
+    "de": ((("ei",), ("huhn", "henne")), (("milch",), ("kuh",))),
+    "it": ((("uovo", "uova"), ("gallina",)), (("latte",), ("vacca", "mucca"))),
+    "es": ((("huevo",), ("gallina",)), (("leche",), ("vaca",))),
+}
+# Words that link a food to its kind in a first part: "Oeuf de poule", "Uovo
+# di gallina", "Milch von der Kuh".
+KIND_LINKS = ("de", "di", "d", "of", "von", "vom", "der")
+
+# The ligature of "œuf", and how every name and every text typed writes it.
+LIGATURE = "œ"
+LIGATURE_WRITTEN_OUT = "oe"
+
 _NOT_A_WORD = re.compile(r"[\W_]+")
 _FIRST_PART_END = re.compile(r"[,(]")
 
@@ -232,7 +294,7 @@ def _combining_marks() -> dict[int, None]:
 
 @functools.lru_cache(maxsize=131_072)
 def fold(text: str) -> str:
-    """Write a text the way the index compares it.
+    """Write a text the way names and what is typed are compared.
 
     The names of the foods found are folded for every search and the same
     ones come back often: the last ones are remembered.
@@ -242,10 +304,28 @@ def fold(text: str) -> str:
 
     Returns:
         The words of the text in lower case, without accents, separated by
-        single spaces; punctuation is dropped.
+        single spaces; punctuation is dropped, and the ligature of "œuf" is
+        written "oe". The index compares the same way but for the ligature,
+        which it keeps: see `spellings`.
     """
     plain = unicodedata.normalize("NFKD", text.casefold()).translate(_combining_marks())
-    return _NOT_A_WORD.sub(" ", plain).strip()
+    return _NOT_A_WORD.sub(" ", plain.replace(LIGATURE, LIGATURE_WRITTEN_OUT)).strip()
+
+
+def spellings(word: str) -> tuple[str, ...]:
+    """Give the ways the index may hold a folded word.
+
+    Args:
+        word: A folded word.
+
+    Returns:
+        The word, and the word with the ligature when it has an "oe": the
+        index holds "oeuf" for the "Oeuf" of the tables and "œuf" for the
+        "Œufs" of Open Food Facts, and a person means both.
+    """
+    if LIGATURE_WRITTEN_OUT in word:
+        return (word, word.replace(LIGATURE_WRITTEN_OUT, LIGATURE))
+    return (word,)
 
 
 def first_part(name: str) -> str:
@@ -305,12 +385,16 @@ def _shape(
 
     Returns:
         The folded words of the name; the same as a set; the words of its
-        first part; and those of the first part that are form words.
+        first part; and those of the first part that do not count unless
+        they were typed: the form words, and the usual kind of the food with
+        the word that links it ("de poule" in "Oeuf de poule").
     """
     words = tuple(fold(name).split())
     head = tuple(fold(first_part(name)).split())
     single, _ = _form_words(language)
-    return words, frozenset(words), head, frozenset(word for word in head if word in single)
+    silent = {word for word in head if word in single}
+    silent.update(_usual_kind_in(head, language)[1])
+    return words, frozenset(words), head, frozenset(silent)
 
 
 def match(
@@ -334,16 +418,17 @@ def match(
     """
     if not typed:
         return MATCH_NONE, 0
-    words, word_set, head, forms = _shape(name, language)
+    words, word_set, head, silent = _shape(name, language)
     count = len(typed)
     if len(words) == count and _same_words(words, typed):
         return MATCH_NAME, count
-    if forms:
-        # A form word does not count in the first part, unless it was typed.
+    if silent:
+        # A form word does not count in the first part, unless it was typed;
+        # nor does the usual kind of the food.
         kept = tuple(
             word
             for word in head
-            if word not in forms or any(same_word(word, wanted) for wanted in typed)
+            if word not in silent or any(same_word(word, wanted) for wanted in typed)
         )
         head = kept or head
     if len(head) == count and _same_words(head, typed):
@@ -455,6 +540,85 @@ def form_level(name: str, language: str | None = None) -> int:
     return FORM_UNSAID
 
 
+@functools.lru_cache(maxsize=16)
+def _usual_kinds(language: str | None) -> tuple[tuple[tuple[str, ...], tuple[str, ...]], ...]:
+    """Give the foods whose usual kind is listed, for a name of a language.
+
+    Args:
+        language: Language code of the name; any other code takes the foods
+            of every language.
+
+    Returns:
+        Pairs of the words naming a food and the words saying its usual kind.
+    """
+    base = (language or "").split("-")[0]
+    if base in USUAL_KINDS:
+        return USUAL_KINDS[base]
+    return tuple(pair for pairs in USUAL_KINDS.values() for pair in pairs)
+
+
+def _usual_kind_in(
+    head: Sequence[str], language: str | None
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Look for the usual kind of a food in the first part of its name.
+
+    Args:
+        head: The folded words of the first part of a name.
+        language: Language code of the name.
+
+    Returns:
+        The words saying the usual kind of the food the first part begins
+        with (none when it begins with no listed food); and the words of the
+        first part that say it there, with those linking it: "de" and
+        "poule" for "Oeuf de poule", nothing for "Oeuf", for "Oeuf de cane"
+        or for "Oeufs au lait".
+    """
+    kinds: tuple[str, ...] = ()
+    for foods, of_the_food in _usual_kinds(language) if head else ():
+        if any(same_word(head[0], food) for food in foods):
+            kinds = of_the_food
+            break
+    if not kinds:
+        return (), ()
+    single, _ = _form_words(language)
+    said = [word for word in head[1:] if word not in single]
+    if (
+        said
+        and any(same_word(said[-1], kind) for kind in kinds)
+        and all(word in KIND_LINKS for word in said[:-1])
+    ):
+        return kinds, tuple(said)
+    return kinds, ()
+
+
+@functools.lru_cache(maxsize=65_536)
+def says_the_usual_kind(name: str, language: str | None = None) -> bool:
+    """Tell whether a name says the usual kind of the food it names.
+
+    Args:
+        name: A name of a food, as its table writes it.
+        language: Language code of the name.
+
+    Returns:
+        True when the name begins with a food of `USUAL_KINDS` and says its
+        usual kind as a part of its own ("Egg, chicken, whole, raw") or in
+        its first part ("Oeuf de poule, entier, cru"); False for any other
+        name, among them those of another food ("Egg roll, chicken") and
+        those that name no kind ("Egg, whole, raw").
+    """
+    parts = [tuple(fold(part).split()) for part in _FIRST_PART_END.split(name)]
+    head = tuple(fold(first_part(name)).split())
+    kinds, said = _usual_kind_in(head, language)
+    if said:
+        return True
+    single, _ = _form_words(language)
+    if not kinds or any(word not in single for word in head[1:]):
+        return False
+    return any(
+        len(part) == 1 and any(same_word(part[0], kind) for kind in kinds) for part in parts[1:]
+    )
+
+
 def begins_with_the_text(matched: int) -> bool:
     """Tell whether a name is, or begins with, the words typed.
 
@@ -506,8 +670,8 @@ def reference_key(
     Returns:
         A key sorting as the module describes: language, a name that is or
         begins with the text, country, reference food before product of a
-        chain, match, words of the first part, form, shortest name,
-        identifier. `REFERENCE_KEY_MATCH` is the position of the `MATCH_...`
+        chain, match, words of the first part, usual kind, form, shortest
+        name, identifier. `REFERENCE_KEY_MATCH` is the position of the `MATCH_...`
         value of the best name.
     """
     wanted = (language or "").split("-")[0]
@@ -533,6 +697,7 @@ def reference_key(
         0 if chain is None else 1,
         matched,
         head_words,
+        0 if says_the_usual_kind(name, lang) else 1,
         form_level(name, lang),
         len(_shape(name, lang)[0]),
         food_id,

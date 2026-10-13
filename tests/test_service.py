@@ -424,6 +424,21 @@ def test_a_reference_food_that_begins_with_the_text_stands_in_when_none_is_the_t
     assert service.found("q=jus&lang=de&country=FR") == [juice_id, "ciqual:2069", "swiss:605"]
 
 
+def test_the_ligature_and_its_two_letters_are_one_spelling(service: Running) -> None:
+    """Typed "œuf" or "oeuf", the same foods are found, however their names are written."""
+    assert search.match_expression(search.parse("Œuf cru")) == '("oeuf"* OR "œuf"*) AND "cru"*'
+    assert search.match_expression(search.parse("bœuf")) == '("boeuf"* OR "bœuf"*)'
+    assert search.match_expression(search.parse("lait cru")) == '"lait"* "cru"*'
+    joined = dict(PRODUCT, names={"fr": "Œufs frais"}, brand="Ferme du test", countries=["FR"])
+    apart = dict(PRODUCT, names={"fr": "Oeufs bio"}, brand="Ferme du test", countries=["FR"])
+    both = {service.post("/v1/products", product)[1]["id"] for product in (joined, apart)}
+    assert len(both) == 2
+    for typed in ("oeuf", "%C5%93uf", "OEUFS", "%C5%92ufs"):  # oeuf, œuf, OEUFS, Œufs
+        assert set(service.found(f"q={typed}&lang=fr&country=FR")) == both, typed
+    assert len(service.found("q=%C5%93ufs+frais")) == 1
+    assert service.found("q=%C5%93uf&lang=fr") == service.found("q=oeuf&lang=fr")
+
+
 def test_what_was_read_of_the_reference_foods_is_not_asked_of_the_index_again(
     service: Running, tmp_path: Path
 ) -> None:

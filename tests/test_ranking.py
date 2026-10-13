@@ -56,7 +56,10 @@ def ordered(
 
 def test_names_are_folded_and_cut_at_the_first_comma_or_parenthesis() -> None:
     """Lower case, no accent, no punctuation; the first part names the food."""
-    assert ranking.fold("  Pâtes SÈCHES, aux œufs (crues) ") == "pates seches aux œufs crues"
+    # The ligature is written out: the tables write "Oeuf", people write both.
+    assert ranking.fold("  Pâtes SÈCHES, aux œufs (crues) ") == "pates seches aux oeufs crues"
+    assert ranking.fold("ŒUF, Bœuf") == ranking.fold("oeuf boeuf") == "oeuf boeuf"
+    assert ranking.spellings("oeuf") == ("oeuf", "œuf") and ranking.spellings("lait") == ("lait",)
     assert ranking.fold("Jus d'orange 100%") == "jus d orange 100"
     assert ranking.first_part("Pomme, chair et peau, crue") == "Pomme"
     assert ranking.first_part("Milch (Durchschnitt)") == "Milch "
@@ -98,6 +101,16 @@ def test_a_plural_or_a_feminine_is_the_same_word_and_a_compound_is_not() -> None
         ("Jus de pomme, pur jus", "pom", "fr", MATCH_EVERY_BEGINNING),
         ("Abricot, dénoyauté, cru", "pomme", "fr", MATCH_NONE),
         ("Pomme", "", "fr", MATCH_NONE),
+        # The ligature and its two letters are one spelling.
+        ("Oeuf, poule, entier, frais ou congelé, cru", "œuf", "fr", MATCH_FIRST_PART),
+        ("Œufs brouillés", "oeuf", "fr", MATCH_FIRST_WORDS),
+        # The usual kind of a food does not count in the first part, unless it was typed.
+        ("Oeuf de poule, entier, cru", "oeuf", "fr", MATCH_FIRST_PART),
+        ("Uovo di gallina, intero, crudo", "uovo", "it", MATCH_FIRST_PART),
+        ("Oeuf de poule, entier, cru", "oeuf de poule", "fr", MATCH_FIRST_PART),
+        ("Oeuf de cane, cru", "oeuf", "fr", MATCH_FIRST_WORDS),
+        ("Oeuf de poule, entier, cru", "oeuf de cane", "fr", MATCH_NONE),
+        ("Bouillon de poule", "bouillon", "fr", MATCH_FIRST_WORDS),
     ],
 )
 def test_how_a_name_matches(name: str, text: str, language: str, expected: int) -> None:
@@ -417,3 +430,118 @@ def test_a_reference_food_that_begins_with_the_text_only_stands_in_when_asked() 
         {"fr": "Frites de patate douce"}, typed("frites"), "fr", ["FR"], "FR", "x", "Quick"
     )
     assert not ranking.comes_first(chain, stand_in=True)
+
+
+@pytest.mark.parametrize(
+    ("name", "language", "expected"),
+    [
+        # The Canadian file and CoFID name the hen like the duck: a part of its own.
+        ("Egg, chicken, whole, fresh or frozen, raw", "en", True),
+        ("Eggs, chicken, whole, raw", "en", True),
+        ("Oeuf, poule, entier, frais ou congelé, cru", "fr", True),
+        ("Egg, duck, whole, fresh, raw", "en", False),
+        ("Oeuf, canard, entier, frais, cru", "fr", False),
+        # USDA and Ciqual do not name the usual kind.
+        ("Egg, whole, raw, fresh", "en", False),
+        ("Oeuf cru", "fr", False),
+        # The Swiss table names it in the first part.
+        ("Oeuf de poule, entier, cru", "fr", True),
+        ("Œuf de poule, entier, cuit dur", "fr", True),
+        ("Uovo di gallina, intero, crudo", "it", True),
+        ("Oeuf de cane, cru", "fr", False),
+        ("Oeufs au lait, rayon frais", "fr", False),
+        # The cow, the day a table names it; and the other animals.
+        ("Milk, cow, whole", "en", True),
+        ("Lait de vache, entier, cru", "fr", True),
+        ("Milch von der Kuh", "de", True),
+        ("Ei, Huhn, roh", "de", True),
+        ("Latte di vacca, intero", "it", True),
+        ("Uova, gallina, intere", "it", True),
+        ("Huevo de gallina, crudo", "es", True),
+        ("Leche de vaca, entera", "es", True),
+        ("Milk, fluid, sheep, whole", "en", False),
+        ("Lait de chèvre, entier, cru", "fr", False),
+        ("Latte di capra", "it", False),
+        ("Leche de cabra", "es", False),
+        # A kind is only usual for its food, and only read in a name that begins with it.
+        ("Egg roll, chicken, refrigerated, heated", "en", False),
+        ("Soup, chicken, canned", "en", False),
+        ("Turkey, hen, breast, meat only, roasted", "en", False),
+        ("Camembert cheese, from cow's milk", "en", False),
+        ("Fromage type feta, au lait de vache 100%", "fr", False),
+        # German writes one word, which is not read.
+        ("Hühnerei, ganz, roh", "de", False),
+        # A name in a language without a list takes the foods of every language.
+        ("Huevo de gallina, crudo", "pt", True),
+    ],
+)
+def test_whether_a_name_says_the_usual_kind(name: str, language: str, expected: bool) -> None:
+    """The hen for the egg and the cow for the milk, as the tables write them."""
+    assert ranking.says_the_usual_kind(name, language) is expected
+
+
+def test_the_list_of_usual_kinds_is_small_and_folded() -> None:
+    """Two foods in five languages, written as they are compared."""
+    assert set(ranking.USUAL_KINDS) == set(ranking.FORM_WORDS)
+    for pairs in ranking.USUAL_KINDS.values():
+        assert len(pairs) == 2
+        for foods, kinds in pairs:
+            assert 1 <= len(foods) <= 2 and 1 <= len(kinds) <= 2
+            for word in (*foods, *kinds):
+                assert word == ranking.fold(word) and " " not in word, word
+
+
+EGGS = {
+    "cnf:88": (
+        "CA",
+        {"en": "Egg, duck, whole, fresh, raw", "fr": "Oeuf, canard, entier, frais, cru"},
+    ),
+    "cnf:89": (
+        "CA",
+        {"en": "Egg, goose, whole, fresh, raw", "fr": "Oeuf, oie, entier, frais, cru"},
+    ),
+    "cnf:125": (
+        "CA",
+        {
+            "en": "Egg, chicken, whole, fresh or frozen, raw",
+            "fr": "Oeuf, poule, entier, frais ou congelé, cru",
+        },
+    ),
+    "cnf:129": (
+        "CA",
+        {"en": "Egg, chicken, whole, cooked, fried", "fr": "Oeuf, poule, entier, cuit, frit"},
+    ),
+    "usda:sr_legacy:1123": ("US", {"en": "Egg, whole, raw, fresh"}),
+    "usda:sr_legacy:1138": ("US", {"en": "Egg, duck, whole, fresh, raw"}),
+    "ciqual:22000": ("FR", {"fr": "Oeuf cru", "en": "Egg, raw"}),
+    "ciqual:22060": ("FR", {"fr": "Oeuf de cane, cru"}),
+    "swiss:290": (
+        "CH",
+        {
+            "fr": "Oeuf de poule, entier, cru",
+            "it": "Uovo di gallina, intero, crudo",
+            "de": "Hühnerei, ganz, roh",
+            "en": "Egg, raw",
+        },
+    ),
+}
+
+
+def test_the_egg_of_the_hen_comes_before_those_of_the_duck_and_the_goose() -> None:
+    """The case that asked for the list: "egg" and "œuf" in Canada."""
+    # The names of the duck and the goose are the shorter ones: they were first.
+    hen_first = ["cnf:125", "cnf:129", "cnf:88", "cnf:89"]
+    assert ordered(EGGS, "egg", "en", "CA")[:4] == hen_first
+    assert ordered(EGGS, "oeuf", "fr", "CA")[:4] == hen_first
+    assert ordered(EGGS, "œuf", "fr", "CA") == ordered(EGGS, "oeuf", "fr", "CA")
+    assert ordered(EGGS, "Œufs", "fr", "CA")[:4] == hen_first
+    # Where the table does not name the usual kind, its name is the shortest: as before.
+    assert ordered(EGGS, "egg", "en", "US")[:2] == ["usda:sr_legacy:1123", "usda:sr_legacy:1138"]
+    assert ordered(EGGS, "oeuf", "fr", "FR")[:2] == ["ciqual:22000", "ciqual:22060"]
+    # The Swiss table writes "Oeuf de poule": it is the egg typed, in Switzerland first.
+    assert ordered(EGGS, "oeuf", "fr", "CH")[0] == "swiss:290"
+    assert ordered(EGGS, "uovo", "it", "CH")[0] == "swiss:290"
+    assert ordered(EGGS, "oeuf", "fr", "FR").index("swiss:290") == 2  # after the French table
+    # Typed, the other kind is the food asked for.
+    assert ordered(EGGS, "oeuf de cane", "fr", "CA")[0] == "ciqual:22060"
+    assert ordered(EGGS, "egg duck", "en", "CA")[0] == "cnf:88"

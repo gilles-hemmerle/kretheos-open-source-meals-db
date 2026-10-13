@@ -2,9 +2,10 @@
 
 What is searched. The words typed are looked for in every name of a food, in
 every language, and in its brand; each word is taken as the beginning of a
-word, and all of them must be found. A text made of digits is also a
-barcode: the food carrying it comes first, then the barcodes beginning with
-those digits.
+word, and all of them must be found. "œuf" and "oeuf" are one word: the
+index keeps the ligature, so both spellings are asked of it. A text made of
+digits is also a barcode: the food carrying it comes first, then the
+barcodes beginning with those digits.
 
 Short texts. The index answers in a few milliseconds when a text is
 selective and in about a second when it is not: two letters match hundreds
@@ -186,9 +187,18 @@ def match_expression(query: Query) -> str:
 
     Returns:
         Every word quoted; a word of several letters is a prefix, a word of
-        one letter a whole word. Empty when there is no word.
+        one letter a whole word. A word the index may hold with a ligature
+        is asked in both spellings: `("oeuf"* OR "œuf"*)`. Empty when there
+        is no word.
     """
-    return " ".join(f'"{word}"' + ("*" if len(word) > 1 else "") for word in query.words)
+    terms = []
+    for word in query.words:
+        prefix = "*" if len(word) > 1 else ""
+        asked = [f'"{spelling}"{prefix}' for spelling in ranking.spellings(word)]
+        terms.append(asked[0] if len(asked) == 1 else f"({' OR '.join(asked)})")
+    # Words in a row are "all of them" for the index, but not next to a
+    # parenthesis: the word between them is then written.
+    return (" AND " if any(term.startswith("(") for term in terms) else " ").join(terms)
 
 
 def _within(

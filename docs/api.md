@@ -369,8 +369,10 @@ served.
 ### Search
 
 - Every word typed is the beginning of a word of a name (in any language) or
-  of the brand, and all of them must be found. Accents and case are ignored.
-  A word of one letter is a whole word.
+  of the brand, and all of them must be found. Accents and case are ignored,
+  and the ligature of "œuf" is its two letters: "œuf" and "oeuf", "bœuf" and
+  "boeuf" find the same foods, the "Oeuf" of the tables and the "Œufs" of
+  Open Food Facts. A word of one letter is a whole word.
 - **Fewer than three letters or digits in all**: only the generic foods and
   the products without barcode are searched (160 000 foods). From the third
   letter on, everything. This is what keeps a search within a fraction of a
@@ -381,8 +383,8 @@ served.
   found too, in the order below.
 - **Reference foods** (`kind=generic`). Every generic food matching is read
   (they are 27 000, in a few blocks of the index) and put in an order made
-  of rules on the words of the names, with no list of foods
-  (`service/ranking.py`):
+  of rules on the words of the names, with no list of foods but the one of
+  point 6 (`service/ranking.py`):
   1. a name in the language of the request (`lang`) that matches, before a
      food that only matches through another language;
   2. a name that is, or begins with, the words typed, before a name that
@@ -398,12 +400,25 @@ served.
      or a feminine is the same word ("Apples", "Eier"); a compound is not;
   5. for a name that begins with the text, the fewest words in its first
      part ("Lait entier, UHT" before "Lait fermenté à boire, nature");
-  6. plain before processed, from short lists of words in French, English,
+  6. the usual kind, where a table names it: the egg of the hen before
+     those of the duck and the goose. This is the one list of foods of the
+     ranking, two of them in five languages (the egg and the hen, the milk
+     and the cow). The Canadian file and CoFID name the hen like the others
+     ("Egg, chicken, whole, fresh or frozen, raw", "Egg, duck, whole, fresh,
+     raw"), and the shortest name, the duck's, came first; USDA and Ciqual
+     do not name the usual kind ("Egg, whole, raw", "Oeuf cru"), which is
+     then the shortest name. Said in the first part, the usual kind does not
+     count there unless it was typed: the "Oeuf de poule, entier, cru" of
+     the Swiss table is the egg. Where a table does not name the cow, the
+     list does nothing: for "milk" the Canadian file still gives "Milk, dry
+     whole" and "Milk, fluid, chocolate, whole" before "Milk, fluid, whole,
+     pasteurized, homogenized, 3.25% M.F.";
+  7. plain before processed, from short lists of words in French, English,
      German, Italian and Spanish: raw, fresh and unflavoured first; then the
      names that say nothing; then cooked; last dried, powdered, canned,
      pre-packed and baby food. A form word does not count in the first part
      unless it was typed: "Oeuf cru" is the egg, like "Oeuf, cru";
-  7. the shortest name, then the identifier.
+  8. the shortest name, then the identifier.
 
   A language answers with the names the sources have: French and English
   for every table that has them, German and Italian only in the Swiss table
