@@ -117,6 +117,10 @@ not by how often a crowd scanned them. What is theirs:
 * only in the country of the request (`comes_first`): what McDonald's
   publishes for Switzerland is the Big Mac of a person in Switzerland, and
   one product of Spain among others for her, ordered as products are;
+* and only for a dish of the chains: under a name the shops sell, "Nutella",
+  "Coca-Cola", the product of a chain goes with the products. That is told
+  from the scans and the brands of the products found, in `search.py`
+  (`_of_the_shops`), not from the words of a name;
 * there the language of its name does not count: the file of a country is
   in one of its languages (the Swiss files are in French), and a person who
   types "Big Mac" in German in Switzerland gets the Swiss figures;

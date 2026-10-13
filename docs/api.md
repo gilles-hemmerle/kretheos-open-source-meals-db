@@ -430,9 +430,9 @@ served.
 - **Products** (`kind=product`) are ordered by: the barcode typed; a barcode
   that is not a 13-digit in-store number before one that is; the foods of `country`
   (the version served lists it); a name equal to the text, then beginning
-  with it, then the rest; what a restaurant chain publishes for its own
-  products before the other products; the most scanned products; the
-  shortest name; the identifier.
+  with it, then the rest; the most scanned products, what a restaurant
+  chain publishes for a product counting for 100 scans; the shortest name;
+  the identifier.
 - **Products of restaurant chains** (identifiers `chain:...`, source title
   "Kratheos"). A chain has no barcode and nobody scans a menu: ranked by
   scans, its figures came after every entry of Open Food Facts of the same
@@ -454,12 +454,41 @@ served.
     French: "Big Mac" asked in German in Switzerland is the Swiss one);
   - any other match ("mcdonald's frites" for "La petite Portion de
     Frites"), and what a chain publishes for another country, is ordered as
-    a product: within the foods of a country and the same match, the chain
-    before the entries of Open Food Facts.
+    a product, where it counts for 100 scans (`CHAIN_SCANS`). The number
+    separates what a chain meets there. Below it, the copies people made of
+    a menu: of the 3 846 entries of Open Food Facts without a barcode that
+    bear the brand of a chain, 3 693 were never scanned and none has more
+    than 13 scans, but one "Big Mac" entered for seven countries, which has
+    68. Above it, what people buy in shops: 3 600 barcoded products have
+    100 scans or more, the bottles of Coca-Cola 300 to 1 200, the jars of
+    Nutella 100 to 1 000.
 
-  This also holds for what a chain sells of another brand: "nutella" or
-  "coca-cola" in Switzerland begin with those of the menus of McDonald's,
-  before the jar and the bottle of the shops.
+  A chain also serves what the shops sell, and a person who types
+  "coca cola" or "nutella" has the bottle or the jar in hand far more often
+  than a cup at a counter. The product of a chain does not come first when
+  the text typed is the name of a product of the shops, which two things
+  tell, on the barcoded products of the `country` whose name, or first
+  part, is the text typed (13-digit in-store numbers left out):
+  - one of them has 100 scans or more ("coca cola", "ketchup", "sel");
+  - two or more bear the text typed as their brand ("Coca-Cola", "Rivella",
+    "Vittel", "Perrier"). Scans alone do not tell these: the most scanned
+    Rivella has 22 and the most scanned Evian 27, fewer than the copy of
+    the Big Mac, while no dish of a chain is a brand of the shops. Under
+    such a name the product of a chain counts for one scan fewer than the
+    most scanned product found, when that is fewer than 100: the bottle
+    comes before the cup whatever its scans. (One product alone is not
+    enough: of 166 products named "Pain au chocolat" in France, one has
+    that as its brand.)
+
+  The product of a chain then goes by the order of the products: "nutella"
+  in Switzerland gives the six jars that have 100 scans or more, the
+  Nutella of McDonald's, then the other jars. A dish keeps its place:
+  "big mac", "whopper", "cheeseburger", "cappuccino" (in Switzerland the
+  most scanned in shops has 13) begin with the chains as told above. Typed
+  with its chain ("mcdonald's nutella") a product is what was asked for,
+  and comes first. Only the products found are looked at, the best matches
+  of the index for the country: a product of the shops that is not among
+  them is not seen ("amandes" in France, whose most scanned bag is not).
 
   Only the records of the files of the chains are concerned: an entry of
   Open Food Facts whose brand is a chain is a product like any other.

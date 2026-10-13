@@ -408,6 +408,26 @@ def test_the_products_of_a_chain_are_ranked_by_their_name(service: Running) -> N
     assert service.found("q=chaine+exemple+the+glace") == ["chain:chaine-exemple:ch:d-007"]
 
 
+def test_a_product_of_the_shops_a_chain_also_serves_begins_with_the_bottle(
+    service: Running,
+) -> None:
+    """The chain is first for its dishes, not under the name of what people buy in shops."""
+    bottle, cup = "gtin:5449000000996", "chain:chaine-exemple:ch:d-007"
+    # The drink of the chain gets the name of the bottle of the shops, sold in
+    # Switzerland and scanned 671 times.
+    body = {"language": "it", "name": "Coca-Cola", "contributor": ALICE}
+    assert service.post(f"/v1/foods/{cup}/translations", body)[0] == 200
+    assert service.food(bottle, "country=CH")["countries"] == ["CH", "FR"]
+    assert service.found("q=coca+cola&lang=fr&country=CH") == [bottle, cup]
+    assert service.found("q=coca-cola&lang=it&country=CH&kind=product") == [bottle, cup]
+    # Its own dishes are untouched: the tea of the chain comes before a tea people
+    # add, and the chain typed begins with its products.
+    tea = dict(PRODUCT, names={"fr": "Thé glacé"}, brand="Autre", countries=["CH"])
+    tea_id = service.post("/v1/products", tea)[1]["id"]
+    assert service.found("q=the+glace&lang=fr&country=CH") == [cup, tea_id]
+    assert service.found("q=chaine+exemple&lang=fr&country=CH")[0].startswith("chain:")
+
+
 def test_a_reference_food_that_begins_with_the_text_stands_in_when_none_is_the_text(
     service: Running,
 ) -> None:

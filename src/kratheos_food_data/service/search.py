@@ -47,20 +47,30 @@ reads, and ranking them doubles the time.) They are ordered by:
 2. a barcode that is not a 13-digit in-store number before one that is;
 3. the foods of the country of the request (the version served lists it);
 4. a name equal to the text, then a name beginning with it, then the rest;
-5. what a restaurant chain publishes for its products before the entries of
-   Open Food Facts: these are the figures of the publisher for that country;
-6. the most scanned products first (the popularity of Open Food Facts);
-7. the shortest name, then the identifier, so that pages are stable.
+5. the most scanned products first (the popularity of Open Food Facts),
+   what a restaurant chain publishes for a product counting for
+   `CHAIN_SCANS` scans;
+6. the shortest name, then the identifier, so that pages are stable.
 
 Products of restaurant chains. A chain has no barcode and nobody scans its
 menu, so by popularity alone its products came after every crowd entry of
-the same name that was scanned once. They are ranked as the reference foods
-are, by their name (`ranking.py`): in the country of the request, a product
-whose name, or first part, is the text typed, or whose chain is ("big mac",
-"mcdonald's", "mcdonald's big mac"), comes first with the reference foods
-that are the text typed, the table of the country before its chains; any
-other product of a chain, and those of other countries, go by the order
-above.
+the same name that was scanned once. They are the figures of the publisher
+for a country, and count for `CHAIN_SCANS` scans: more than any copy people
+made of a menu, fewer than what people buy in shops. And they are ranked as
+the reference foods are, by their name (`ranking.py`): in the country of
+the request, a product whose name, or first part, is the text typed, or
+whose chain is ("big mac", "mcdonald's", "mcdonald's big mac"), comes first
+with the reference foods that are the text typed, the table of the country
+before its chains; any other product of a chain, and those of other
+countries, go by the order above.
+
+A chain also serves what the shops sell, a Coca-Cola, a Nutella, a ketchup:
+there a person has the bottle or the jar in hand far more often than a cup
+at a counter. When the text typed is the name of a product of the shops
+(`_of_the_shops`: a barcoded product of that name has `CHAIN_SCANS` scans or
+more, or the text is the brand of several), the product of a chain named so
+does not come first: it goes by the order above, behind the bottles people
+scan. Typed with its chain ("mcdonald's nutella"), it is what was asked for.
 
 In-store barcodes. A shop numbers what it weighs and packs itself with
 numbers of its own (GTIN-13 beginning with 02, 04 or 20 to 29, and the 8
@@ -104,7 +114,7 @@ import heapq
 import re
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 
 from ..barcode import is_in_store_label, normalize_gtin
@@ -134,12 +144,21 @@ REFERENCE_RANKED = 300
 REFERENCE_KEPT = 200
 REFERENCE_FIRST = 40
 MIN_BARCODE_PREFIX = 4
-# Whose figures a food carries, where the order of the products does not tell
-# two foods apart: a food-composition table, a restaurant chain for its own
-# products, anyone else (the crowd entries of Open Food Facts, what people add).
-FROM_A_TABLE = 0
-FROM_ITS_CHAIN = 1
-FROM_ANYONE = 2
+# What a restaurant chain publishes for a product counts, among the products
+# of a country whose name matches as well, for this many scans of Open Food
+# Facts. The number separates the two kinds of entries a chain meets there.
+# Below it, the copies people made of a menu: of the 3 846 entries without a
+# barcode that bear the brand of a chain, 3 693 were never scanned and none
+# has more than 13 scans, but one "Big Mac" entered for seven countries,
+# which has 68. Above it, what people buy in shops: 3 600 barcoded products
+# have 100 scans or more, the bottles of Coca-Cola 300 to 1 200, the jars of
+# Nutella 100 to 1 000.
+CHAIN_SCANS = 100
+# Barcoded products of a name that must carry it as their brand for the name
+# to be that of a brand of the shops. One alone may be the mistake of its
+# author: of the 166 products named "Pain au chocolat" in France, one has
+# "Pain au chocolat" as its brand.
+BRAND_PRODUCTS = 2
 PROGRESS_STEPS = 20_000
 _SEPARATORS = re.compile(r"[\s\-]")
 
@@ -556,6 +575,61 @@ def _barcode_matches(context: Context, query: Query) -> tuple[str | None, list[i
     return exact, found
 
 
+def _of_the_shops(
+    found: Iterable[tuple[Food, dict]], query: Query, country: str | None
+) -> tuple[bool, int]:
+    """Tell whether the text typed is the name of something the shops sell.
+
+    A chain serves dishes of its own, a Big Mac, a Whopper, a cheeseburger,
+    and products of the shops, a Coca-Cola, a Nutella: for those a person
+    has the bottle or the jar in hand far more often than a cup at a
+    counter. Two things tell them apart, each on the barcoded products of
+    the country of the request whose name, or first part, is the text typed
+    (the 13-digit in-store numbers left out: they are not the barcode of a
+    maker, and the copies people make of a menu bear such numbers):
+
+    * one of them has `CHAIN_SCANS` scans or more: people buy it in shops
+      (the bottle of Coca-Cola, a ketchup, a packet of salt);
+    * `BRAND_PRODUCTS` of them or more bear the text typed as their brand
+      ("Coca-Cola", "Rivella", "Vittel"). Scans alone do not tell these: the
+      bottle of Rivella has 22 and that of Evian 27, fewer than the copy of
+      a Big Mac, and no dish of a chain is a brand of the shops. Under such
+      a name a product of a chain counts for fewer scans than the most
+      scanned product of the brand, so that the bottle comes before the cup
+      whatever its scans.
+
+    Args:
+        found: The foods found, each with the version it is served by.
+        query: The query.
+        country: Country of the request, if any; without one, the products
+            of every country are looked at.
+
+    Returns:
+        Whether the text typed is the name of a product of the shops, and
+        the scans a product of a chain counts for among the products:
+        `CHAIN_SCANS`, or one fewer than the most scanned product of the
+        brand typed when that is less. Only the foods found are looked at:
+        the index is not asked again.
+    """
+    of_the_brand = 0
+    most_scanned = 0
+    for food, served in found:
+        if food.kind != KIND_PRODUCT or not food.barcode or is_in_store_label(food.barcode):
+            continue
+        if country and country not in served["countries"]:
+            continue
+        brand = any(fold(part) == query.text for part in (food.brand or "").split(","))
+        if not brand and food.popularity < CHAIN_SCANS:
+            continue
+        names = {lang: entry[0] for lang, entry in food.names.items()}
+        if ranking.may_be_the_food_typed(names, query.words):
+            of_the_brand += brand
+            most_scanned = max(most_scanned, food.popularity)
+    if of_the_brand >= BRAND_PRODUCTS:
+        return True, min(CHAIN_SCANS, max(most_scanned - 1, 0))
+    return most_scanned >= CHAIN_SCANS, CHAIN_SCANS
+
+
 def _order(
     food: Food,
     query: Query,
@@ -565,6 +639,8 @@ def _order(
     served: dict,
     kind: str | None,
     stand_in: bool = False,
+    of_the_shops: bool = False,
+    chain_scans: int = CHAIN_SCANS,
 ) -> tuple:
     """Build the sort key of a food among the results.
 
@@ -578,14 +654,19 @@ def _order(
         kind: The kind asked for, if any.
         stand_in: Whether no reference food is the text typed, so that
             those that begin with it come first (see `_reference_order`).
+        of_the_shops: Whether the text typed is the name of a product of
+            the shops (`_of_the_shops`).
+        chain_scans: The scans a product of a chain counts for among the
+            products (`_of_the_shops`).
 
     Returns:
         A key sorting the results as the module describes: the barcode
         typed; then the reference foods in the order of `ranking.py` (all of
         them in a search of reference foods, those that are the food typed
         otherwise, or that begin with it when none is) and, in the same
-        order, the products of the chains that are the food typed; then the
-        rest in the order of the products.
+        order, the products of the chains that are the food typed, unless
+        their name is that of a product of the shops; then the rest in the
+        order of the products.
     """
     typed_barcode = 0 if barcode and food.barcode == barcode else 1
     chain = foods.chain_of(food)
@@ -594,7 +675,14 @@ def _order(
         reference = ranking.reference_key(
             names, query.words, language, served["countries"], country, food.id, chain
         )
-        if kind == KIND_GENERIC or ranking.comes_first(reference, stand_in):
+        first = kind == KIND_GENERIC or ranking.comes_first(reference, stand_in)
+        if first and chain is not None and of_the_shops:
+            # "Coca-Cola", "Nutella": the name is that of a product of the
+            # shops, and the chain that serves it is one seller among others.
+            # Typed with its chain ("mcdonald's nutella"), it is what was
+            # asked for: only the product named by its own name steps back.
+            first = not ranking.may_be_the_food_typed(names, query.words)
+        if first:
             return (typed_barcode, 0, *reference)
     best = 2
     shortest = 99
@@ -610,18 +698,15 @@ def _order(
             best, shortest = closeness, len(folded.split())
         elif closeness == best:
             shortest = min(shortest, len(folded.split()))
-    if food.kind == KIND_GENERIC:
-        whose = FROM_A_TABLE
-    else:
-        whose = FROM_ANYONE if chain is None else FROM_ITS_CHAIN
     return (
         typed_barcode,
         1,
         1 if is_in_store_label(food.barcode) else 0,
         0 if country and country in served["countries"] else 1,
         best,
-        whose,
-        -food.popularity,
+        0 if food.kind == KIND_GENERIC else 1,
+        -(food.popularity if chain is None else chain_scans),
+        1 if chain is None else 0,
         shortest,
         food.id,
     )
@@ -697,15 +782,29 @@ def search(
     # database without having matched there.
     missing = [food_id for food_id in live_ids if food_id not in in_base]
     rows += catalogue.foods_by_id(context.base, missing)
-    found = foods.assemble(context, rows, live_ids)
+    found = [
+        (food, food.served(country, context.user_version_votes))
+        for food in foods.assemble(context, rows, live_ids).values()
+    ]
+    of_the_shops, chain_scans = _of_the_shops(found, query, country)
     ranked = []
-    for food in found.values():
+    for food, served in found:
         if kind and food.kind != kind:
             continue
         if drink is not None and food.is_drink != drink:
             continue
-        served = food.served(country, context.user_version_votes)
-        key = _order(food, query, barcode, language, country, served, kind, stand_in)
+        key = _order(
+            food,
+            query,
+            barcode,
+            language,
+            country,
+            served,
+            kind,
+            stand_in,
+            of_the_shops,
+            chain_scans,
+        )
         ranked.append((key, food))
     ranked.sort(key=lambda item: item[0])
     return [food for _, food in ranked]
