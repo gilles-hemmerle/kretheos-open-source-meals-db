@@ -7,7 +7,7 @@ is never loaded whole.
 What is taken: the barcode (`code`), the product names in every language, the
 brands, the most specific category of the Open Food Facts taxonomy, the
 nutrient values per 100 g or 100 ml, the serving size, the countries of sale,
-the date of last modification and the number of distinct scans.
+the day of last modification (in UTC) and the number of distinct scans.
 
 What is never read: any column naming a contributor (`creator`, `editors`,
 `last_editor`, `last_modified_by`, `informers_tags`, `correctors_tags`,
@@ -55,6 +55,12 @@ DRINK_CATEGORIES = ("en:beverages", "en:milks", "en:dairy-drinks")
 DRINK_FOOD_GROUP = "en:beverages"
 SERVING_UNIT_PATTERN = r"[0-9]\s*(ml|cl|dl|l|fl\.? ?oz|mg|kg|g|oz)\b"
 VOLUME_UNITS = ("ml", "cl", "dl", "l", "fl oz", "fl. oz", "floz", "fl.oz")
+# The day of the last modification, in UTC, from a Unix time in seconds. The
+# time is made without a zone: `to_timestamp` gives one with a zone, which a
+# cast to DATE reads in the time zone of the machine, so that a product
+# modified at 23:55 UTC was of the next day on a machine in Zurich and of the
+# same day on one in Los Angeles.
+UPDATED_AT_SQL = "CAST(make_timestamp(CAST(last_modified_t AS BIGINT) * 1000000) AS DATE)"
 
 # Staging column -> name of the nutrient in the `nutriments` list.
 NUTRIENTS = {
@@ -181,7 +187,7 @@ def slim_sql(parquet: str) -> str:
         CASE WHEN product_quantity_unit IN ('g', 'ml') THEN product_quantity_unit END
             AS quantity_unit,
         nutrition_data_per = '100ml' AS per_100ml,
-        CAST(to_timestamp(last_modified_t) AS DATE) AS updated_at,
+        {UPDATED_AT_SQL} AS updated_at,
         coalesce(obsolete, FALSE) AS obsolete,
         unique_scans_n AS popularity,
         {nutrient_columns}

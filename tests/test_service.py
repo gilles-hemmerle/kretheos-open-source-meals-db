@@ -137,7 +137,7 @@ def test_food_record_has_the_shape_of_the_contract(service: Running) -> None:
         "votes": 0,
         "versions_count": 2,
         "flags": [],
-        "updated_at": "2026-10-10T00:00:00Z",
+        "updated_at": "2026-10-09T00:00:00Z",
     }
     # The name: the language asked for, else English, else whatever exists.
     assert service.food(NUTELLA, "lang=de")["name_language"] == "en"

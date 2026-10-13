@@ -55,7 +55,7 @@ def test_open_food_facts(declared_sources: dict[str, Source], adapter_context: c
     assert result.stats["rows_in_source"] == 10
     assert result.stats["rows_staged"] == 9  # one barcode appears on two rows
     assert result.stats["distinct_country_tags_not_mapped"] == 2  # world and an unknown tag
-    assert result.released == "2026-10-10"
+    assert result.released == "2026-10-09"
 
     nutella = rows["3017620422003"]
     assert nutella["names"] == {"fr": "Nutella", "en": "Nutella hazelnut spread"}
@@ -70,7 +70,8 @@ def test_open_food_facts(declared_sources: dict[str, Source], adapter_context: c
     assert nutella["salt_g"] == pytest.approx(0.107)
     assert nutella["is_drink"] is False
     assert nutella["popularity"] == 1064
-    assert nutella["updated_at"] == date(2026, 10, 10)
+    # Modified at 23:55:55 UTC on the 9th: the day in UTC, not that of the machine.
+    assert nutella["updated_at"] == date(2026, 10, 9)
     assert nutella["source_url"] == "https://world.openfoodfacts.org/product/3017620422003"
 
     cola = rows["5449000000996"]
@@ -95,6 +96,25 @@ def test_open_food_facts(declared_sources: dict[str, Source], adapter_context: c
     assert wine["source_flags"] == [schema.FLAG_OBSOLETE]
     assert rows["20095314"]["countries"] is None  # its only tag maps to no country
     assert rows["4006381333931"]["names"] is None
+
+
+ZONES = ["UTC", "Europe/Zurich", "America/Los_Angeles", "Pacific/Kiritimati"]
+
+
+@pytest.mark.parametrize("zone", ZONES)
+def test_open_food_facts_dates_do_not_depend_on_the_time_zone(
+    zone: str, declared_sources: dict[str, Source], adapter_context: callable
+) -> None:
+    """The day of a modification is the day in UTC, wherever the build runs."""
+    context = adapter_context("off")
+    # What the time zone of the machine sets for a build: 23:55:55 UTC on the 9th is
+    # the 10th in Zurich and on Kiritimati (UTC+14), the 9th in Los Angeles.
+    context.con.execute(f"SET TimeZone = '{zone}'")
+    result = get_adapter("openfoodfacts")(declared_sources["off"], context)
+    rows = staged_rows(context.con, context.staging_path)
+    assert rows["3017620422003"]["updated_at"] == date(2026, 10, 9)
+    assert rows["5449000000996"]["updated_at"] == date(2026, 10, 8)  # 11:50:39 UTC
+    assert result.released == "2026-10-09"
 
 
 def test_open_food_facts_never_copies_contributors(
